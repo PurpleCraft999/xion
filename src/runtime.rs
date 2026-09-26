@@ -101,6 +101,7 @@ impl Runtime {
                 // }
                 // None
             }
+            BoolLiteral(b)=>Some(Value::Bool(b)),
             Return(value) => {
                 let value = if let Some(value) = value {
                     self.eval(*value,errors)
@@ -136,6 +137,17 @@ impl Runtime {
 pub enum Value {
     String(String),
     Number(i64),
+    Bool(bool),
+}
+impl std::fmt::Display for Value{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let string_value = match self{
+            Self::Bool(b)=>b.to_string(),
+            Self::Number(n)=>n.to_string(),
+            Self::String(s)=>s.to_owned()
+        };
+        write!(f,"{string_value}")
+    }
 }
 
 #[derive(Debug, Clone)]

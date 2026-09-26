@@ -128,6 +128,8 @@ pub enum Token {
     StringLiteral(String),
     NumberLiteral(i64),
     Class,
+    True,
+    False
 }
 
 impl Token {
@@ -137,6 +139,8 @@ impl Token {
             KEY_WORD_CLASS => Class,
             "fn" | "func" => Fn,
             "return"=>Return,
+            "true"=>True,
+            "false"=>False,
             number if let Ok(num) = number.parse::<i64>() => NumberLiteral(num),
             name if !s.starts_with(|c: char| c.is_numeric())
                 && s.chars().all(|c| c.is_alphanumeric() || c == '_') =>

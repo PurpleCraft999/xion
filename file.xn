@@ -18,8 +18,9 @@ let num = 15;
 
 
 let z = num;
-
+let b=true;
 
 
 
 print("hello world!");
+print(b);

@@ -1,6 +1,6 @@
 use std::iter::Peekable;
 
-use crate::token::Token::{self, *};
+use crate::{ast::Node::BoolLiteral, token::Token::{self, *}};
 
 pub struct AstBuilder {
     tokens: Peekable<std::vec::IntoIter<Token>>,
@@ -118,8 +118,10 @@ impl AstBuilder {
                 Node::Return(return_value)
             }
             Let => self.parse_var()?,
+            True=>Node::BoolLiteral(true),
+            False=>Node::BoolLiteral(false),
 
-            _ => {
+            Fn|LeftBrace|RightBrace|LeftParen|RightParen|SemiColon|Comma|Colon|WhiteSpace|Equals|EOF|Class => {
                 self.error(&format!("not expresion {:?}", token));
                 return None;
             }
@@ -243,6 +245,8 @@ impl AstBuilder {
                     None
                 }
                 Fn => self.parse_function(),
+                True=>Some(BoolLiteral(true)),
+                False=>Some(BoolLiteral(false)),
                 EOF => break,
             };
             if let Some(node) = node {
@@ -264,6 +268,7 @@ pub enum Node {
     Var(Box<VarAst>),
     StringLiteral(String),
     NumberLiteral(i64),
+    BoolLiteral(bool),
     ///name of var
     VarRef(String),
     FnCall(FnCallAst),

@@ -53,8 +53,12 @@ impl<'a> Lexer<'a> {
 
     pub fn lex(mut self) -> Vec<Token> {
         while let Some(current) = self.next() {
-            // println!("current token \"{}\"",current);
+            //comments
+            if current=='#'{
+                self.consume_until('\n');
+            }
 
+            //string literals
             if current == '"' {
                 let string_lit = self.consume_until('"');
                 self.add_token(Token::StringLiteral(string_lit));

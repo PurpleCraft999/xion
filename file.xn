@@ -1,7 +1,7 @@
-class hello {
+#class hello {
 
 
-} 
+#} 
 fn func_name(param_one){
     let y = "y";
     return param_one

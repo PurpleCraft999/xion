@@ -88,8 +88,8 @@ impl AstBuilder {
             self.error("not equals after var name");
             return None;
         }
-
-        let value = self.parse_expr()?;
+        let next = self.next()?;
+        let value = self.parse_expr(next)?;
 
         if !self.consume_if(|t| t == &SemiColon) {
             self.error("no semicolon after var");
@@ -98,10 +98,10 @@ impl AstBuilder {
 
         Some(Node::Var(Box::new(VarAst { name, value })))
     }
-    fn parse_expr(&mut self) -> Option<Node> {
+    fn parse_expr(&mut self, token: Token) -> Option<Node> {
         // self.consume_whitespace();
 
-        let node = match self.next()? {
+        let node = match token {
             StringLiteral(name) => Node::StringLiteral(name),
             Name(name) => {
                 if self.peek() == Some(&LeftParen) {
@@ -114,8 +114,22 @@ impl AstBuilder {
                 }
             }
             NumberLiteral(num) => Node::NumberLiteral(num),
+            Return => {
+                let token = self.next();
+                let return_value = if let Some(value) = token {
+                    match self.parse_expr(value) {
+                        Some(v) => Some(Box::new(v)),
+                        None => None,
+                    }
+                } else {
+                    None
+                };
+                Node::Return(return_value)
+            }
+            Let => self.parse_var()?,
+
             _ => {
-                self.error("not expresion");
+                self.error(&format!("not expresion {:?}", token));
                 return None;
             }
         };
@@ -129,7 +143,7 @@ impl AstBuilder {
                 break;
             }
 
-            if let Some(expr) = self.parse_expr() {
+            if let Some(expr) = self.parse_expr(token) {
                 args.push(expr);
             } else {
                 self.error("parsing args error");
@@ -191,9 +205,10 @@ impl AstBuilder {
             if token == RightBrace {
                 break;
             }
-
-            if let Some(var) = self.parse_var() {
-                scope.push(var);
+            if let Some(next) = self.next() {
+                if let Some(var) = self.parse_expr(next) {
+                    scope.push(var);
+                }
             }
         }
 
@@ -211,8 +226,8 @@ impl AstBuilder {
                 //never meant to be read here
                 //whitespace cant be in at this point
                 WhiteSpace | Colon | SemiColon | Comma | LeftBrace | RightBrace | Equals
-                | LeftParen | RightParen => {
-                    self.error("unexpected lang syntax");
+                | LeftParen | RightParen | Return => {
+                    self.error(&format!("unexpected lang syntax {:?}", token));
                     None
                 }
                 Let => self.parse_var(),
@@ -237,7 +252,7 @@ impl AstBuilder {
         self.tree
     }
 }
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub enum Node {
     Class(ClassAst),
     Var(Box<VarAst>),
@@ -247,24 +262,25 @@ pub enum Node {
     VarRef(String),
     FnCall(FnCallAst),
     FnDeclare(FunctionDefAst),
+    Return(Option<Box<Node>>),
 }
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct ClassAst {
     name: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct VarAst {
     pub name: String,
     pub value: Node,
 }
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct FnCallAst {
     pub name: String,
     pub args: Vec<Node>,
 }
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct FunctionDefAst {
     pub name: String,
     pub paramaters: Vec<String>,

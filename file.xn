@@ -2,22 +2,23 @@ class hello {
 
 
 } 
+fn func_name(param_one){
+    let y = "y";
+    return param_one
+} 
 
 
 let var = "var"; 
 
 
 
-let x = func_name(); 
+let x = func_name(5); 
 
 let num = 15;
 
 
 let z = num;
 
-fn func_name(param_one){
-    let y = "y";
-} 
 
 
 

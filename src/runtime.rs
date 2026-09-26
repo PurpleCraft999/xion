@@ -2,23 +2,27 @@ use std::collections::HashMap;
 
 use crate::ast::Node;
 use crate::ast::Node::*;
-#[derive(Debug)]
+
+
+
+#[derive(Debug,Clone)]
 pub struct Runtime {
     nodes: Vec<Node>,
-    // functions:Vec<Function>,
     scope: Scope,
+    return_value:Option<Value>,
 }
 impl Runtime {
     pub fn new(nodes: Vec<Node>) -> Self {
         Self {
             nodes,
             scope: Scope::new(),
+            return_value:None,
         }
     }
-    fn get_current_scope_mut(&mut self) -> &mut Scope {
+    fn get_current_scope_mut(&mut self) -> &mut Scope{
         &mut self.scope
     }
-    fn get_current_scope(&self) -> &Scope {
+    fn get_current_scope(&self) -> &Scope{
         &self.scope
     }
 
@@ -45,49 +49,65 @@ impl Runtime {
                 None
             }
             FnDeclare(mut func) => {
-                let body = self.scope(func.body);
+                let body = self.child_runtime(func.body);
                 self.get_current_scope_mut().add_func(Function {
                     name: func.name,
                     params: func.paramaters,
-                    body: body.scope,
+                    body: body,
                 });
 
                 None
             }
             FnCall(func_ast) => {
-                if let Some(func) = self
+                let func = self
                     .get_current_scope()
-                    .get_function(&func_ast.name)
-                    .cloned()
-                {
+                    .get_function(&func_ast.name).cloned()?;
+
+
+                // if let Some(func) = self
+                //     .get_current_scope()
+                //     .get_function(&func_ast.name)
+                //     .cloned()
+                // {
                     let mut values = Vec::new();
                     for node in func_ast.args {
                         if let Some(node) = self.eval(node) {
                             values.push(node)
                         }
                     }
+                // func.call(args)
 
-                    func.call(values);
-                }
+                    func.call(values)
+                // } else {
+                //     println!("cannot find function {}",func_ast.name)
+                //     None
+                // }
+// None
+                
+            }
+            Return(value)=>{
+                let value = if let Some(value) = value{self.eval(*value)} else {None};
+                self.return_value=value;
+
 
                 None
             }
         }
     }
 
-    fn scope(&self, nodes: Vec<Node>) -> Self {
+    fn child_runtime(&self, nodes: Vec<Node>) -> Runtime {
         let scope = Scope::with_parent(self.get_current_scope().clone());
-        Runtime { scope, nodes }
+        Runtime { scope, nodes,return_value:None }
     }
 
-    pub fn run(mut self) -> Scope {
+    pub fn run(mut self) -> Option<Value>{
         let nodes = std::mem::take(&mut self.nodes);
         for node in nodes {
-            let s = self.eval(node);
+            self.eval(node);
             // println!("{s:?}");
         }
         println!("{self:?}");
-        self.scope
+        self.return_value
     }
 }
 #[derive(Debug, Clone)]
@@ -96,7 +116,7 @@ pub enum Value {
     Number(i64),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug,Clone)]
 pub struct Scope {
     parent_scope: Option<Box<Scope>>,
     vars: HashMap<String, Variable>,
@@ -126,10 +146,11 @@ impl Scope {
     }
 
     pub fn get_var(&self, name: &str) -> Option<&Variable> {
-        self.vars.get(name).or(match &self.parent_scope {
-            Some(s) => s.get_var(name),
-            None => None,
+        self.vars.get(name).or_else(||match &self.parent_scope{
+            Some(scope)=>scope.get_var(name),
+            None=>None
         })
+        
     }
     pub fn get_var_value(&self, name: &str) -> Option<&Value> {
         match self.get_var(name) {
@@ -152,17 +173,19 @@ pub struct Variable {
     name: String,
     value: Value,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug,Clone)]
 pub struct Function {
     name: String,
     params: Vec<String>,
-    body: Scope,
+    body: Runtime,
 }
 impl Function {
-    fn call(self, args: Vec<Value>) {
-        let mut scope = self.body;
-        for (name, value) in self.params.into_iter().zip(args.into_iter()) {
-            scope.add_var(Variable { name, value });
+    fn call(&self, args: Vec<Value>)->Option<Value> {
+        let mut runtime=self.body.clone();
+        for (name, value) in self.params.iter().zip(args.into_iter()) {
+            runtime.scope.add_var(Variable { name:name.clone(), value });
         }
+        runtime.run()
+
     }
 }

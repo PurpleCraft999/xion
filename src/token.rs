@@ -113,6 +113,7 @@ pub enum Token {
     SemiColon,
     Colon,
     Fn,
+    Return,
     WhiteSpace,
     Comma,
     Equals,
@@ -130,7 +131,7 @@ impl Token {
             KEY_WORD_LET => Let,
             KEY_WORD_CLASS => Class,
             "fn" | "func" => Fn,
-
+            "return"=>Return,
             number if let Ok(num) = number.parse::<i64>() => NumberLiteral(num),
             name if !s.starts_with(|c: char| c.is_numeric())
                 && s.chars().all(|c| c.is_alphanumeric() || c == '_') =>

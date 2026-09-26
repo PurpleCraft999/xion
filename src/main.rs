@@ -9,5 +9,5 @@ fn main() {
     let ast = AstBuilder::new(lexed);
     let nodes = ast.build();
 
-    Runtime::new(nodes).run();
+    Runtime::start(nodes).run();
 }

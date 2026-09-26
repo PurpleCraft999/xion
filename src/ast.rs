@@ -75,7 +75,7 @@ impl AstBuilder {
         // }
 
         self.consume_until(RightBrace);
-        Some(Node::Class(ClassAst { name: class_name }))
+        Some(Node::Class(ClassAst { _name: class_name }))
     }
     fn parse_var(&mut self) -> Option<Node> {
         // self.consume_whitespace();
@@ -261,12 +261,15 @@ pub enum Node {
     ///name of var
     VarRef(String),
     FnCall(FnCallAst),
+
+
+
     FnDeclare(FunctionDefAst),
     Return(Option<Box<Node>>),
 }
 #[derive(Debug,Clone)]
 pub struct ClassAst {
-    name: String,
+    _name: String,
 }
 
 #[derive(Debug,Clone)]

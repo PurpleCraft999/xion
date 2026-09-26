@@ -56,6 +56,7 @@ impl<'a> Lexer<'a> {
             //comments
             if current=='#'{
                 self.consume_until('\n');
+                continue;
             }
 
             //string literals

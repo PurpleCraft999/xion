@@ -1,9 +1,6 @@
-use std::{iter::Peekable};
+use std::iter::Peekable;
 
-use crate::{
-    ast::Node::Var,
-    token::Token::{self, *},
-};
+use crate::token::Token::{self, *};
 
 pub struct AstBuilder {
     tokens: Peekable<std::vec::IntoIter<Token>>,
@@ -17,8 +14,6 @@ impl AstBuilder {
             tree: Vec::new(),
         }
     }
-
-
 
     fn next(&mut self) -> Option<Token> {
         self.tokens.next()
@@ -38,7 +33,7 @@ impl AstBuilder {
     fn consume_until(&mut self, t: Token) {
         let mut tokens = Vec::new();
 
-        while let Some(token) = self.tokens.next() {
+        for token in self.tokens.by_ref() {
             if t == token {
                 break;
             }
@@ -96,15 +91,12 @@ impl AstBuilder {
 
         let value = self.parse_expr()?;
 
-        if !self.consume_if(|t|t==&SemiColon){
+        if !self.consume_if(|t| t == &SemiColon) {
             self.error("no semicolon after var");
             return None;
         }
 
-        Some(Var(Box::new(VarAst {
-            name,
-            value,
-        })))
+        Some(Node::Var(Box::new(VarAst { name, value })))
     }
     fn parse_expr(&mut self) -> Option<Node> {
         // self.consume_whitespace();
@@ -121,6 +113,7 @@ impl AstBuilder {
                     Node::VarRef(name)
                 }
             }
+            NumberLiteral(num) => Node::NumberLiteral(num),
             _ => {
                 self.error("not expresion");
                 return None;
@@ -149,28 +142,30 @@ impl AstBuilder {
         args
     }
 
-    fn parse_function(&mut self)->Option<Node>{
-
-        let name= self.next_if_name()?;
-        if !self.consume_if(|t|t==&LeftParen){
+    fn parse_function(&mut self) -> Option<Node> {
+        let name = self.next_if_name()?;
+        if !self.consume_if(|t| t == &LeftParen) {
             self.error("no left paren after function name");
             return None;
         }
         let mut params = Vec::new();
 
-        while let Some(token) = self.next(){
-            if token==RightParen{
+        while let Some(token) = self.next() {
+            if token == RightParen {
                 break;
             }
 
-            if token==Comma{
+            if token == Comma {
                 continue;
             }
             if let Name(param_name) = token {
                 params.push(param_name);
                 continue;
             }
-            self.error(&format!("unexpected token {:?} while parsing fn header",token));
+            self.error(&format!(
+                "unexpected token {:?} while parsing fn header",
+                token
+            ));
             break;
         }
 
@@ -178,47 +173,34 @@ impl AstBuilder {
         //     self.error("not left brace after function header");
         //     return None
         // }
-        
 
-
-
-        Some(Node::Fn(FunctionDefAst { name, paramaters: params,body:self.parse_scope() }))
-        
-
+        Some(Node::Fn(FunctionDefAst {
+            name,
+            paramaters: params,
+            body: self.parse_scope(),
+        }))
     }
-    fn parse_scope(&mut self)->Vec<Node>{
-        if !self.consume_if(|t|t==&LeftBrace){
+    fn parse_scope(&mut self) -> Vec<Node> {
+        if !self.consume_if(|t| t == &LeftBrace) {
             self.error("not left brace to start scope");
             return Vec::new();
         }
 
         let mut scope = Vec::new();
-        while let Some(token) = self.next(){
-            if token==RightBrace{
+        while let Some(token) = self.next() {
+            if token == RightBrace {
                 break;
             }
 
-
-
-            if let Some(var) = self.parse_var(){
+            if let Some(var) = self.parse_var() {
                 scope.push(var);
             }
-            
-
-
-
-
-
         }
 
         scope
-
-
     }
 
-
-
-    pub fn build(mut self)->Vec<Node> {
+    pub fn build(mut self) -> Vec<Node> {
         while let Some(token) = self.next() {
             let node = match token {
                 Class => self.parse_class(),
@@ -234,12 +216,12 @@ impl AstBuilder {
                     None
                 }
                 Let => self.parse_var(),
-                StringLiteral(_) => {
-                    self.error("string lit in main ast branch");
+                StringLiteral(_) | NumberLiteral(_) => {
+                    self.error("literal in main ast branch");
 
                     None
                 }
-                Fn=>self.parse_function(),
+                Fn => self.parse_function(),
                 EOF => break,
             };
             if let Some(node) = node {
@@ -260,6 +242,7 @@ pub enum Node {
     Class(ClassAst),
     Var(Box<VarAst>),
     StringLiteral(String),
+    NumberLiteral(i64),
     ///name of var
     VarRef(String),
     FnRef(FnRefAst),
@@ -281,10 +264,9 @@ pub struct FnRefAst {
     args: Vec<Node>,
 }
 
-
 #[derive(Debug)]
-pub struct FunctionDefAst{
-    name:String,
-    paramaters:Vec<String>,
-    body:Vec<Node>,
+pub struct FunctionDefAst {
+    name: String,
+    paramaters: Vec<String>,
+    body: Vec<Node>,
 }

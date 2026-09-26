@@ -10,6 +10,7 @@ let var = "var";
 
 let x = func_name(); 
 
+let num = 15;
 
 fn func_name(param_one){
     let y = "y";

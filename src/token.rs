@@ -21,7 +21,7 @@ impl<'a> Lexer<'a> {
         let mut next = String::from(current);
         while let Some(c) = &self.file.peek() {
             let c = **c;
-            if Token::from_char(c).is_some(){
+            if Token::from_char(c).is_some() {
                 break;
             }
             self.next();
@@ -85,7 +85,7 @@ impl<'a> Lexer<'a> {
 }
 
 const fn is_whitespace(c: char) -> bool {
-    c == ' ' || c == '\n'||c=='\t'
+    c == ' ' || c == '\n' || c == '\t'
 }
 
 // pub fn lex(file:&str)->Vec<Token>{
@@ -120,6 +120,7 @@ pub enum Token {
     Let,
     Name(String),
     StringLiteral(String),
+    NumberLiteral(i64),
     Class,
 }
 
@@ -128,7 +129,9 @@ impl Token {
         let token = match s {
             KEY_WORD_LET => Let,
             KEY_WORD_CLASS => Class,
-            "fn"|"func"=>Fn,
+            "fn" | "func" => Fn,
+
+            number if let Ok(num) = number.parse::<i64>() => NumberLiteral(num),
             name if !s.starts_with(|c: char| c.is_numeric())
                 && s.chars().all(|c| c.is_alphanumeric() || c == '_') =>
             {
@@ -146,11 +149,11 @@ impl Token {
             '}' => RightBrace,
             ';' => SemiColon,
             ':' => Colon,
-            ','=>Comma,
-            '='=>Equals,
-            '('=>LeftParen,
-            ')'=>RightParen,
-            c if is_whitespace(c) => WhiteSpace,
+            ',' => Comma,
+            '=' => Equals,
+            '(' => LeftParen,
+            ')' => RightParen,
+            whitespace if is_whitespace(whitespace) => WhiteSpace,
             _ => return None,
         };
         Some(token)

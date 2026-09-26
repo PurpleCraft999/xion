@@ -1,8 +1,4 @@
-use std::{
-    // fmt::Display,
-    iter::Peekable,
-    str::Chars,
-};
+use std::{iter::Peekable, str::Chars};
 
 use crate::token::Token::*;
 
@@ -21,11 +17,11 @@ impl<'a> Lexer<'a> {
         self.file.next()
     }
 
-    fn consume_until_whitespace(&mut self, current: char) -> String {
+    fn consume_until_char_token(&mut self, current: char) -> String {
         let mut next = String::from(current);
         while let Some(c) = &self.file.peek() {
             let c = **c;
-            if is_whitespace(c) {
+            if Token::from_char(c).is_some(){
                 break;
             }
             self.next();
@@ -62,9 +58,9 @@ impl<'a> Lexer<'a> {
             if current == '"' {
                 let string_lit = self.consume_until('"');
                 self.add_token(Token::StringLiteral(string_lit));
-                if self.next().is_none() {
-                    println!("unended string literal")
-                }
+                // if self.next().is_none() {
+                //     println!("unended string literal")
+                // }
                 continue;
             }
 
@@ -73,7 +69,7 @@ impl<'a> Lexer<'a> {
                 continue;
             }
 
-            let current_str = self.consume_until_whitespace(current);
+            let current_str = self.consume_until_char_token(current);
 
             if let Some(token) = Token::from_str(&current_str) {
                 self.add_token(token);
@@ -89,7 +85,7 @@ impl<'a> Lexer<'a> {
 }
 
 const fn is_whitespace(c: char) -> bool {
-    c == ' ' || c == '\n'
+    c == ' ' || c == '\n'||c=='\t'
 }
 
 // pub fn lex(file:&str)->Vec<Token>{
@@ -108,13 +104,18 @@ const fn is_whitespace(c: char) -> bool {
 //     tokens
 // }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Token {
     LeftBrace,
     RightBrace,
+    LeftParen,
+    RightParen,
     SemiColon,
     Colon,
+    Fn,
     WhiteSpace,
+    Comma,
+    Equals,
     EOF,
     Let,
     Name(String),
@@ -125,9 +126,9 @@ pub enum Token {
 impl Token {
     fn from_str(s: &str) -> Option<Self> {
         let token = match s {
-            "let" => Let,
-            "class" => Class,
-
+            KEY_WORD_LET => Let,
+            KEY_WORD_CLASS => Class,
+            "fn"|"func"=>Fn,
             name if !s.starts_with(|c: char| c.is_numeric())
                 && s.chars().all(|c| c.is_alphanumeric() || c == '_') =>
             {
@@ -141,13 +142,22 @@ impl Token {
 
     fn from_char(c: char) -> Option<Self> {
         let token = match c {
-            ' ' | '\n' => WhiteSpace,
             '{' => LeftBrace,
             '}' => RightBrace,
             ';' => SemiColon,
             ':' => Colon,
+            ','=>Comma,
+            '='=>Equals,
+            '('=>LeftParen,
+            ')'=>RightParen,
+            c if is_whitespace(c) => WhiteSpace,
             _ => return None,
         };
         Some(token)
     }
+    pub fn is_name(&self) -> bool {
+        matches!(self, Name(_))
+    }
 }
+pub const KEY_WORD_LET: &str = "let";
+pub const KEY_WORD_CLASS: &str = "class";

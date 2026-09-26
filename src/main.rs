@@ -1,7 +1,11 @@
-use my_lang::token::Lexer;
+use xion::{ast::AstBuilder, token::Lexer};
 
 fn main() {
-    let lexer = Lexer::new("{}; let class classs this_is_a_name \"a string\"  \n ");
-    let lexed = lexer.lex();
-    println!("{:?}", lexed);
+    let file = std::fs::read_to_string("file.xn").unwrap();
+    let lexer = Lexer::new(&file);
+    let mut lexed = lexer.lex();
+    lexed.retain(|s|s!=&xion::token::Token::WhiteSpace);
+    println!("lexed: {:?}", lexed);
+    let ast = AstBuilder::new(lexed);
+    ast.build();
 }

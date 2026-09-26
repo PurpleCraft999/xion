@@ -1,0 +1,19 @@
+class hello {
+
+
+} 
+
+
+let var = "var"; 
+
+
+
+let x = func_name(); 
+
+
+fn func_name(param_one){
+    let y = "y";
+} 
+
+
+

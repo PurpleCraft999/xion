@@ -12,6 +12,9 @@ let x = func_name();
 
 let num = 15;
 
+
+let z = num;
+
 fn func_name(param_one){
     let y = "y";
 } 

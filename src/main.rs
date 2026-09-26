@@ -1,4 +1,4 @@
-use xion::{ast::AstBuilder, token::Lexer};
+use xion::{ast::AstBuilder, runtime::Runtime, token::Lexer};
 
 fn main() {
     let file = std::fs::read_to_string("file.xn").unwrap();
@@ -7,5 +7,7 @@ fn main() {
     lexed.retain(|s| s != &xion::token::Token::WhiteSpace);
     println!("lexed: {:?}", lexed);
     let ast = AstBuilder::new(lexed);
-    ast.build();
+    let nodes = ast.build();
+
+    Runtime::new(nodes).run();
 }

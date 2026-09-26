@@ -105,7 +105,7 @@ impl AstBuilder {
             StringLiteral(name) => Node::StringLiteral(name),
             Name(name) => {
                 if self.peek() == Some(&LeftParen) {
-                    Node::FnRef(FnRefAst {
+                    Node::FnCall(FnCallAst {
                         name,
                         args: self.parse_args(),
                     })
@@ -174,7 +174,7 @@ impl AstBuilder {
         //     return None
         // }
 
-        Some(Node::Fn(FunctionDefAst {
+        Some(Node::FnDeclare(FunctionDefAst {
             name,
             paramaters: params,
             body: self.parse_scope(),
@@ -245,8 +245,8 @@ pub enum Node {
     NumberLiteral(i64),
     ///name of var
     VarRef(String),
-    FnRef(FnRefAst),
-    Fn(FunctionDefAst),
+    FnCall(FnCallAst),
+    FnDeclare(FunctionDefAst),
 }
 #[derive(Debug)]
 pub struct ClassAst {
@@ -255,18 +255,18 @@ pub struct ClassAst {
 
 #[derive(Debug)]
 pub struct VarAst {
-    name: String,
-    value: Node,
+    pub name: String,
+    pub value: Node,
 }
 #[derive(Debug)]
-pub struct FnRefAst {
-    name: String,
-    args: Vec<Node>,
+pub struct FnCallAst {
+    pub name: String,
+    pub args: Vec<Node>,
 }
 
 #[derive(Debug)]
 pub struct FunctionDefAst {
-    name: String,
-    paramaters: Vec<String>,
-    body: Vec<Node>,
+    pub name: String,
+    pub paramaters: Vec<String>,
+    pub body: Vec<Node>,
 }

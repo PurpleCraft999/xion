@@ -57,7 +57,6 @@ impl AstBuilder {
         })
     }
     fn parse_class(&mut self) -> Option<Node> {
-        // self.consume_whitespace();
         let Some(class_name) = self.next_if_name() else {
             self.error("token sould be name");
             return None;
@@ -79,6 +78,7 @@ impl AstBuilder {
     }
     fn parse_var(&mut self) -> Option<Node> {
         // self.consume_whitespace();
+        self.consume_if(|t| t == &Let);
         let Some(name) = self.next_if_name() else {
             self.error("no name after let");
             return None;
@@ -103,16 +103,7 @@ impl AstBuilder {
 
         let node = match token {
             StringLiteral(name) => Node::StringLiteral(name),
-            Name(name) => {
-                if self.peek() == Some(&LeftParen) {
-                    Node::FnCall(FnCallAst {
-                        name,
-                        args: self.parse_args(),
-                    })
-                } else {
-                    Node::VarRef(name)
-                }
-            }
+            Name(name) => self.parse_name(name),
             NumberLiteral(num) => Node::NumberLiteral(num),
             Return => {
                 let token = self.next();
@@ -157,6 +148,7 @@ impl AstBuilder {
     }
 
     fn parse_function(&mut self) -> Option<Node> {
+        self.consume_if(|t|t==&Fn);
         let name = self.next_if_name()?;
         if !self.consume_if(|t| t == &LeftParen) {
             self.error("no left paren after function name");
@@ -214,26 +206,40 @@ impl AstBuilder {
 
         scope
     }
+    fn parse_name(&mut self, name: String) -> Node {
+        if self.peek() == Some(&LeftParen) {
+            Node::FnCall(FnCallAst {
+                name,
+                args: self.parse_args(),
+            })
+        } else {
+            Node::VarRef(name)
+        }
+    }
 
     pub fn build(mut self) -> Vec<Node> {
-        while let Some(token) = self.next() {
+        while let Some(token) = self.peek() {
             let node = match token {
                 Class => self.parse_class(),
                 Name(_) => {
-                    self.error("unexpeced name");
-                    None
+                    // self.tokens.next_back()
+                    let name = self.next_if_name().expect("we are matching the name branch of the node");
+                    Some(self.parse_name(name))
+
+                    // self.error("unexpeced name");
                 }
                 //never meant to be read here
                 //whitespace cant be in at this point
                 WhiteSpace | Colon | SemiColon | Comma | LeftBrace | RightBrace | Equals
                 | LeftParen | RightParen | Return => {
-                    self.error(&format!("unexpected lang syntax {:?}", token));
+                    // self.error(&format!("unexpected lang syntax {:?}", token));
+                    self.next();
                     None
                 }
                 Let => self.parse_var(),
                 StringLiteral(_) | NumberLiteral(_) => {
                     self.error("literal in main ast branch");
-
+                    self.next();
                     None
                 }
                 Fn => self.parse_function(),
@@ -252,7 +258,7 @@ impl AstBuilder {
         self.tree
     }
 }
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub enum Node {
     Class(ClassAst),
     Var(Box<VarAst>),
@@ -262,28 +268,26 @@ pub enum Node {
     VarRef(String),
     FnCall(FnCallAst),
 
-
-
     FnDeclare(FunctionDefAst),
     Return(Option<Box<Node>>),
 }
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct ClassAst {
     _name: String,
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct VarAst {
     pub name: String,
     pub value: Node,
 }
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct FnCallAst {
     pub name: String,
     pub args: Vec<Node>,
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct FunctionDefAst {
     pub name: String,
     pub paramaters: Vec<String>,

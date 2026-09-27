@@ -25,5 +25,15 @@ let b=true;
 print("hello world!");
 print(b);
 
+let mutated = 5;
+
+
+fn print_mut(){
+    print(mutated);
+}
+print_mut();
+mutated  = 4;
+print_mut();
+
 
 #print(input());

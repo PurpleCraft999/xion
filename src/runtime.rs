@@ -71,11 +71,10 @@ impl Runtime {
                 None
             }
             FnDeclare(func) => {
-                let body = self.child_runtime(func.body);
                 if self.get_current_scope_mut().add_func(NonNativeFunction {
                     name: func.name.clone(),
                     params: func.paramaters,
-                    body,
+                    body:func.body,
                 }).is_err() {
                     errors.error_string(format!(
                         "function {} already exists cannot create",
@@ -104,7 +103,7 @@ impl Runtime {
                 }
                 // func.call(args)
 
-                func.call(values)
+                func.call(values,self.scope())
                 // } else {
                 //     println!("cannot find function {}",func_ast.name)
                 //     None
@@ -125,9 +124,8 @@ impl Runtime {
         }
     }
 
-    fn child_runtime(&self, nodes: Vec<Node>) -> Runtime {
-        let scope = Scope::with_parent(self.get_current_scope().clone());
-        Self::with_scope_and_nodes(nodes, scope)
+    fn scope(&self)->Scope{
+        Scope::with_parent(self.get_current_scope().clone())
     }
 
     pub fn run(mut self) -> Option<Value> {
@@ -286,9 +284,9 @@ pub enum Function {
     Native(NativeFunction),
 }
 impl Function {
-    fn call(&self, args: Vec<Value>) -> Option<Value> {
+    fn call(&self, args: Vec<Value>,scope:Scope) -> Option<Value> {
         match self {
-            Self::NonNative(f) => f.call(args),
+            Self::NonNative(f) => f.call(args,scope),
             Self::Native(f) => (f.func)(args),
         }
     }
@@ -310,11 +308,11 @@ pub struct NativeFunction {
 pub struct NonNativeFunction {
     name: String,
     params: Vec<String>,
-    body: Runtime,
+    body: Vec<Node>,
 }
 impl NonNativeFunction {
-    fn call(&self, args: Vec<Value>) -> Option<Value> {
-        let mut runtime = self.body.clone();
+    fn call(&self, args: Vec<Value>,scope:Scope) -> Option<Value> {
+        let mut runtime = Runtime::with_scope_and_nodes(self.body.clone(), scope);
         for (name, value) in self.params.iter().zip(args) {
             runtime
                 .scope

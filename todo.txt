@@ -1,6 +1,5 @@
 escape codes for strings
-std lib
-var re assignment 
-mutatable things
 
 class
+
+add properties to types and methods

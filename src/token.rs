@@ -130,6 +130,7 @@ pub enum Token {
     False,
     Plus,
     Minus,
+    Asterisk,
 }
 
 impl Token {
@@ -164,7 +165,8 @@ impl Token {
             '(' => LeftParen,
             ')' => RightParen,
             '+' => Plus,
-            '-' => Minus,
+            '-'=>Minus,
+            '*' => Asterisk,
             whitespace if is_whitespace(whitespace) => WhiteSpace,
             _ => return None,
         };
@@ -174,7 +176,7 @@ impl Token {
         matches!(self, Name(_))
     }
     pub fn is_math_sign(&self) -> bool {
-        matches!(self, Plus | Minus)
+        matches!(self, Plus | Minus| Asterisk)
     }
 }
 pub const KEY_WORD_LET: &str = "let";

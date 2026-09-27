@@ -139,22 +139,22 @@ impl AstBuilder {
 
                 Node::Return(return_value)
             }
-            Plus => {
-                let next_token = self.next()?;
-                Node::Math {
-                    left: Box::new(self.previous_node()?.clone()),
-                    op: MathSign::Plus,
-                    right: Box::new(self.parse_expr(next_token)?),
-                }
-            }
+            Plus => self.parse_math_symbol(MathSign::Plus)?,
+
             Minus => {
-                let next_token = self.next()?;
-                Node::Math {
-                    left: Box::new(self.previous_node()?.clone()),
-                    op: MathSign::Minus,
-                    right: Box::new(self.parse_expr(next_token)?),
+                if !matches!(self.previous_node(), Some(Node::NumberLiteral(_)))
+                    && matches!(self.peek(), Some(NumberLiteral(_)))
+                {
+                    match self.next()? {
+                        NumberLiteral(n) => Node::NumberLiteral(-n),
+                        _ => return None,
+                    }
+                } else {
+                    self.parse_math_symbol(MathSign::Minus)?
                 }
             }
+
+            Asterisk => self.parse_math_symbol(MathSign::Multiply)?,
 
             Let => self.parse_var()?,
             True => Node::BoolLiteral(true),
@@ -168,6 +168,16 @@ impl AstBuilder {
         };
         Some(node)
     }
+    fn parse_math_symbol(&mut self, op: MathSign) -> Option<Node> {
+        let next_token = self.next()?;
+        let last = self.tree.pop()?;
+        Some(Node::Math {
+            left: Box::new(last),
+            op,
+            right: Box::new(self.parse_expr(next_token)?),
+        })
+    }
+
     fn parse_args(&mut self) -> Vec<Node> {
         let mut args = Vec::new();
         self.consume_if(|t| t == &LeftParen);
@@ -282,8 +292,8 @@ impl AstBuilder {
                 //never meant to be read here
                 //whitespace cant be in at this point
                 WhiteSpace | Colon | SemiColon | Comma | LeftBrace | RightBrace | Equals
-                | LeftParen | RightParen | Return | Plus | Minus => {
-                    // self.error(&format!("unexpected lang syntax {:?}", token));
+                | LeftParen | RightParen | Return | Plus | Minus | Asterisk => {
+                    println!("unexpected lang syntax {:?}", token);
                     self.next();
                     None
                 }
@@ -340,6 +350,7 @@ pub enum Node {
 pub enum MathSign {
     Plus,
     Minus,
+    Multiply,
 }
 
 #[derive(Debug, Clone)]

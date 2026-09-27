@@ -136,6 +136,7 @@ impl Runtime {
                     Some(match op {
                         MathSign::Plus => left.add(&right).ok()?,
                         MathSign::Minus => left.sub(&right).ok()?,
+                        MathSign::Multiply => unimplemented!(),
                     })
                 } else {
                     None

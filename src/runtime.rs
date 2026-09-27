@@ -96,25 +96,14 @@ impl Runtime {
                     .get_function(&func_ast.name)
                     .cloned()?;
 
-                // if let Some(func) = self
-                //     .get_current_scope()
-                //     .get_function(&func_ast.name)
-                //     .cloned()
-                // {
                 let mut values = Vec::new();
                 for node in func_ast.args {
                     if let Some(node) = self.eval(node, errors) {
                         values.push(node)
                     }
                 }
-                // func.call(args)
 
                 func.call(values, self.scope())
-                // } else {
-                //     println!("cannot find function {}",func_ast.name)
-                //     None
-                // }
-                // None
             }
             BoolLiteral(b) => Some(Value::Bool(b)),
             Return(value) => {
@@ -196,7 +185,7 @@ impl Value {
             },
         }
     }
-    fn mul(&self,other: &Value)->Result<Value,MathError>{
+    fn mul(&self, other: &Value) -> Result<Value, MathError> {
         match self {
             Value::Bool(_) | Value::String(_) => Err(MathError::InvalidTypeLeft),
             Value::Number(left) => match other {
@@ -204,8 +193,6 @@ impl Value {
                 Value::Number(right) => Ok(Value::Number(*left * *right)),
             },
         }
-
-
     }
 }
 #[derive(Debug, Clone)]
@@ -266,10 +253,6 @@ impl Scope {
     }
 
     fn update_var(&mut self, name: &str, var: Variable) -> Result<(), DoesNotExist> {
-        // if !self.vars.contains_key(name){
-        //     return Err(DoesNotExist);
-        // }
-
         match self.vars.get_mut(name) {
             Some(value) => {
                 *value = var;
@@ -307,8 +290,6 @@ impl Scope {
             None => None,
         })
     }
-
-    // fn add_function
 }
 
 #[derive(Debug)]
@@ -327,10 +308,6 @@ impl ErrorLog {
             changed: false,
         }
     }
-    // fn error(&mut self,error:&str){
-    //     self.errors.push(error.to_owned());
-    //     self.changed=true
-    // }
     fn error_string(&mut self, error: String) {
         self.errors.push(error);
         self.changed = true

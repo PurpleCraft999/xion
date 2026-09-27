@@ -91,22 +91,6 @@ const fn is_whitespace(c: char) -> bool {
     c == ' ' || c == '\n' || c == '\t'
 }
 
-// pub fn lex(file:&str)->Vec<Token>{
-//     let mut file = file.split(|c| is_whitespace(c)).peekable();
-//     let mut tokens = Vec::new();
-//     loop {
-//         let Some(current) = file.next() else {break;};
-
-//         if let Some(token) = Token::from_str(current){
-//             tokens.push(token);
-//         }
-
-//     }
-//     tokens.push(Token::EOF);
-
-//     tokens
-// }
-
 #[derive(Debug, PartialEq)]
 pub enum Token {
     LeftBrace,

@@ -41,15 +41,6 @@ impl AstBuilder {
             tokens.push(token);
         }
     }
-    // fn consume_whitespace(&mut self) {
-    //     while let Some(token) = self.tokens.peek() {
-    //         if token == &WhiteSpace {
-    //             self.tokens.next();
-    //         } else {
-    //             break;
-    //         }
-    //     }
-    // }
     fn next_if_name(&mut self) -> Option<String> {
         self.tokens.next_if_map(|t| match t {
             Token::Name(s) => Ok(s),
@@ -61,7 +52,6 @@ impl AstBuilder {
             self.error("token sould be name");
             return None;
         };
-        // self.consume_whitespace();
         if !self.consume_if(|t| matches!(t, LeftBrace)) {
             self.error("next non whitespace token was not left brace")
         }
@@ -77,13 +67,11 @@ impl AstBuilder {
         Some(Node::Class(ClassAst { _name: class_name }))
     }
     fn parse_var(&mut self) -> Option<Node> {
-        // self.consume_whitespace();
         self.consume_if(|t| t == &Let);
         let Some(name) = self.next_if_name() else {
             self.error("no name after let");
             return None;
         };
-        // self.consume_whitespace();
         if !self.consume_if(|t| t == &Equals) {
             self.error("not equals after var name");
             return None;
@@ -126,20 +114,15 @@ impl AstBuilder {
 
                 Node::Return(return_value)
             }
-            // Plus => self.parse_math_symbol(MathSign::Plus)?,
-            Minus => {
-                if matches!(self.peek(), Some(NumberLiteral(_))) {
-                    let num = self.next()?;
-                    match num {
-                        NumberLiteral(num) => Node::NumberLiteral(-num),
-                        _ => unreachable!(""),
-                    }
-                } else {
-                    return None;
+            Minus => match self.peek()? {
+                NumberLiteral(num) => {
+                    let num = -*num;
+                    self.next();
+                    Node::NumberLiteral(num)
                 }
-            }
+                _ => return None,
+            },
 
-            // Asterisk => self.parse_math_symbol(MathSign::Multiply)?,
             Let => self.parse_var()?,
             True => Node::BoolLiteral(true),
             False => Node::BoolLiteral(false),
@@ -202,11 +185,6 @@ impl AstBuilder {
             break;
         }
 
-        // if !self.consume_if(|t|t==&LeftBrace){
-        //     self.error("not left brace after function header");
-        //     return None
-        // }
-
         Some(Node::FnDeclare(FunctionDefAst {
             name,
             paramaters: params,
@@ -256,13 +234,10 @@ impl AstBuilder {
             let node = match token {
                 Class => self.parse_class(),
                 Name(_) => {
-                    // self.tokens.next_back()
                     let name = self
                         .next_if_name()
                         .expect("we are matching the name branch of the node");
                     self.parse_name(name)
-
-                    // self.error("unexpeced name");
                 }
                 //never meant to be read here
                 //whitespace cant be in at this point
@@ -287,9 +262,6 @@ impl AstBuilder {
             if let Some(node) = node {
                 self.tree.push(node);
             }
-            // else{
-            //     self.error(&format!("unexpeced token {:?}",token));
-            // }
 
             println!("tokens: {:?}", self.tokens);
         }

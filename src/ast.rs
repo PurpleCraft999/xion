@@ -87,19 +87,19 @@ impl AstBuilder {
         Some(Node::Var(Box::new(VarAst { name, value })))
     }
     fn parse_expr(&mut self, token: Token) -> Option<Node> {
-        let node = match token {
+        match token {
             StringLiteral(name) => {
                 //strings only support addition
                 if self.peek() == Some(&Plus) {
                     self.tree.push(Node::StringLiteral(name));
                     let n = self.next()?;
-                    self.parse_expr(n)?
+                    self.parse_expr(n)
                 } else {
-                    Node::StringLiteral(name)
+                    Some(Node::StringLiteral(name))
                 }
             }
-            Name(name) => self.parse_name(name)?,
-            NumberLiteral(_) | LeftParen => self.parse_math_equasion(token)?,
+            Name(name) => self.parse_name(name),
+            NumberLiteral(_) | LeftParen => self.parse_math_equasion(token),
             Return => {
                 let token = self.next();
                 let return_value = if let Some(value) = token {
@@ -112,28 +112,27 @@ impl AstBuilder {
                     return None;
                 }
 
-                Node::Return(return_value)
+                Some(Node::Return(return_value))
             }
             Minus => match self.peek()? {
                 NumberLiteral(num) => {
                     let num = -*num;
                     self.next();
-                    Node::NumberLiteral(num)
+                    Some(Node::NumberLiteral(num))
                 }
-                _ => return None,
+                _ => None,
             },
 
-            Let => self.parse_var()?,
-            True => Node::BoolLiteral(true),
-            False => Node::BoolLiteral(false),
+            Let => self.parse_var(),
+            True => Some(Node::BoolLiteral(true)),
+            False => Some(Node::BoolLiteral(false)),
 
             Fn | LeftBrace | RightBrace | RightParen | SemiColon | Comma | Colon | WhiteSpace
             | Equals | EOF | Class | Plus | Asterisk => {
                 self.error(&format!("not expresion {:?}", token));
-                return None;
+                None
             }
-        };
-        Some(node)
+        }
     }
 
     fn parse_args(&mut self) -> Vec<Node> {

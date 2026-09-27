@@ -24,3 +24,6 @@ let b=true;
 
 print("hello world!");
 print(b);
+
+
+#print(input());

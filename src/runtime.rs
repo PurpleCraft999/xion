@@ -176,6 +176,7 @@ impl Scope {
     }
     fn attach_std_lib(&mut self) {
         self.add_native_fn("print", xion_std::print);
+        self.add_native_fn("input", xion_std::input);
     }
     fn add_native_fn(&mut self, name: &str, func: NativeFunctionHeader) {
         self.functions

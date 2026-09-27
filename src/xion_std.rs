@@ -14,6 +14,18 @@ pub fn print(values: Vec<Value>) -> Option<Value> {
         }
         println!()
     }
-
     None
+}
+
+
+
+pub fn input(_values: Vec<Value>)->Option<Value>{
+    let mut out = String::new();
+    match std::io::stdin().read_line(&mut out){
+        Ok(_)=>(),
+        Err(err)=>println!("Error reading input steam {err}")
+    }
+    Some(Value::String(out))
+
+
 }

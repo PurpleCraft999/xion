@@ -136,7 +136,7 @@ impl Runtime {
                     Some(match op {
                         MathSign::Plus => left.add(&right).ok()?,
                         MathSign::Minus => left.sub(&right).ok()?,
-                        MathSign::Multiply => unimplemented!(),
+                        MathSign::Multiply => left.mul(&right).ok()?,
                     })
                 } else {
                     None
@@ -195,6 +195,17 @@ impl Value {
                 Value::Number(right) => Ok(Value::Number(*left - *right)),
             },
         }
+    }
+    fn mul(&self,other: &Value)->Result<Value,MathError>{
+        match self {
+            Value::Bool(_) | Value::String(_) => Err(MathError::InvalidTypeLeft),
+            Value::Number(left) => match other {
+                Value::Bool(_) | Value::String(_) => Err(MathError::InvalidTypeRight),
+                Value::Number(right) => Ok(Value::Number(*left * *right)),
+            },
+        }
+
+
     }
 }
 #[derive(Debug, Clone)]

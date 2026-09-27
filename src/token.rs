@@ -165,7 +165,7 @@ impl Token {
             '(' => LeftParen,
             ')' => RightParen,
             '+' => Plus,
-            '-'=>Minus,
+            '-' => Minus,
             '*' => Asterisk,
             whitespace if is_whitespace(whitespace) => WhiteSpace,
             _ => return None,
@@ -175,8 +175,11 @@ impl Token {
     pub fn is_name(&self) -> bool {
         matches!(self, Name(_))
     }
-    pub fn is_math_sign(&self) -> bool {
-        matches!(self, Plus | Minus| Asterisk)
+    pub fn is_addition_or_subtraction(&self) -> bool {
+        matches!(self, Plus | Minus)
+    }
+    pub fn is_multiplication_or_division(&self) -> bool {
+        matches!(self, Asterisk)
     }
 }
 pub const KEY_WORD_LET: &str = "let";

@@ -21,9 +21,6 @@ impl AstBuilder {
     fn peek(&mut self) -> Option<&Token> {
         self.tokens.peek()
     }
-    fn previous_node(&self) -> Option<&Node> {
-        self.tree.last()
-    }
 
     fn error(&self, err: &str) {
         println!("error: {}", err)
@@ -114,17 +111,7 @@ impl AstBuilder {
                 }
             }
             Name(name) => self.parse_name(name)?,
-            NumberLiteral(num) => {
-                if let Some(sign) = self.peek()
-                    && sign.is_math_sign()
-                {
-                    self.tree.push(Node::NumberLiteral(num));
-                    let n = self.next()?;
-                    self.parse_expr(n)?
-                } else {
-                    Node::NumberLiteral(num)
-                }
-            }
+            NumberLiteral(_) | LeftParen => self.parse_math_equasion(token)?,
             Return => {
                 let token = self.next();
                 let return_value = if let Some(value) = token {
@@ -139,43 +126,31 @@ impl AstBuilder {
 
                 Node::Return(return_value)
             }
-            Plus => self.parse_math_symbol(MathSign::Plus)?,
-
+            // Plus => self.parse_math_symbol(MathSign::Plus)?,
             Minus => {
-                if !matches!(self.previous_node(), Some(Node::NumberLiteral(_)))
-                    && matches!(self.peek(), Some(NumberLiteral(_)))
-                {
-                    match self.next()? {
-                        NumberLiteral(n) => Node::NumberLiteral(-n),
-                        _ => return None,
+                if matches!(self.peek(), Some(NumberLiteral(_))) {
+                    let num = self.next()?;
+                    match num {
+                        NumberLiteral(num) => Node::NumberLiteral(-num),
+                        _ => unreachable!(""),
                     }
                 } else {
-                    self.parse_math_symbol(MathSign::Minus)?
+                    return None;
                 }
             }
 
-            Asterisk => self.parse_math_symbol(MathSign::Multiply)?,
-
+            // Asterisk => self.parse_math_symbol(MathSign::Multiply)?,
             Let => self.parse_var()?,
             True => Node::BoolLiteral(true),
             False => Node::BoolLiteral(false),
 
-            Fn | LeftBrace | RightBrace | LeftParen | RightParen | SemiColon | Comma | Colon
-            | WhiteSpace | Equals | EOF | Class => {
+            Fn | LeftBrace | RightBrace | RightParen | SemiColon | Comma | Colon | WhiteSpace
+            | Equals | EOF | Class | Plus | Asterisk => {
                 self.error(&format!("not expresion {:?}", token));
                 return None;
             }
         };
         Some(node)
-    }
-    fn parse_math_symbol(&mut self, op: MathSign) -> Option<Node> {
-        let next_token = self.next()?;
-        let last = self.tree.pop()?;
-        Some(Node::Math {
-            left: Box::new(last),
-            op,
-            right: Box::new(self.parse_expr(next_token)?),
-        })
     }
 
     fn parse_args(&mut self) -> Vec<Node> {
@@ -322,6 +297,75 @@ impl AstBuilder {
         self.tree
     }
 }
+//math operator stuff
+impl AstBuilder {
+    fn parse_math_equasion(&mut self, number: Token) -> Option<Node> {
+        let mut left = self.parse_mult_div(number)?;
+
+        while let Some(token) = self.peek() {
+            if token.is_addition_or_subtraction() {
+                let op = match self.peek()? {
+                    Plus => MathSign::Plus,
+                    Minus => MathSign::Minus,
+                    _ => return None,
+                };
+                self.next();
+                let n = self.next()?;
+                let right = self.parse_mult_div(n)?;
+                left = Node::Math {
+                    left: Box::new(left),
+                    op,
+                    right: Box::new(right),
+                };
+            } else {
+                break;
+            }
+        }
+        Some(left)
+    }
+
+    fn parse_mult_div(&mut self, start: Token) -> Option<Node> {
+        let mut left = self.parse_primary(start)?;
+
+        while let Some(token) = self.peek() {
+            if token.is_multiplication_or_division() {
+                let op = match self.peek()? {
+                    Asterisk => MathSign::Multiply,
+                    _ => return None,
+                };
+                self.next();
+                let n = self.next()?;
+                let right = self.parse_primary(n)?;
+                left = Node::Math {
+                    left: Box::new(left),
+                    op,
+                    right: Box::new(right),
+                };
+            } else {
+                break;
+            }
+        }
+        Some(left)
+    }
+
+    fn parse_primary(&mut self, start: Token) -> Option<Node> {
+        match start {
+            Token::NumberLiteral(num) => Some(Node::NumberLiteral(num)),
+            Token::LeftParen => {
+                let expr = self.parse_math_equasion(start)?;
+                if !self.consume_if(|t| t == &RightParen) {
+                    self.error("no closing parenthises for math expresion");
+                }
+                Some(expr)
+            }
+            other => {
+                self.error(&format!("Unexpected token: {:?}", other));
+                None
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Node {
     Class(ClassAst),

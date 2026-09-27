@@ -1,5 +1,7 @@
 use std::iter::Peekable;
 
+use log::{debug, error, warn};
+
 use crate::token::Token::{self, *};
 
 pub struct AstBuilder {
@@ -20,10 +22,6 @@ impl AstBuilder {
     }
     fn peek(&mut self) -> Option<&Token> {
         self.tokens.peek()
-    }
-
-    fn error(&self, err: &str) {
-        println!("error: {}", err)
     }
     ///returns true if token was consumed
     fn consume_if(&mut self, c: impl FnOnce(&Token) -> bool) -> bool {
@@ -49,11 +47,11 @@ impl AstBuilder {
     }
     fn parse_class(&mut self) -> Option<Node> {
         let Some(class_name) = self.next_if_name() else {
-            self.error("token sould be name");
+            error!("token sould be name");
             return None;
         };
         if !self.consume_if(|t| matches!(t, LeftBrace)) {
-            self.error("next non whitespace token was not left brace")
+            error!("next non whitespace token was not left brace")
         }
         //class fields
         // while let Some(token) = self.next() && token!=RightBrace{
@@ -69,18 +67,18 @@ impl AstBuilder {
     fn parse_var(&mut self) -> Option<Node> {
         self.consume_if(|t| t == &Let);
         let Some(name) = self.next_if_name() else {
-            self.error("no name after let");
+            error!("no name after let");
             return None;
         };
         if !self.consume_if(|t| t == &Equals) {
-            self.error("not equals after var name");
+            error!("not equals after var name");
             return None;
         }
         let next = self.next()?;
         let value = self.parse_expr(next)?;
 
         if !self.consume_if(|t| t == &SemiColon) {
-            self.error("no semicolon after var");
+            error!("no semicolon after var");
             return None;
         }
 
@@ -108,7 +106,7 @@ impl AstBuilder {
                     None
                 };
                 if !self.consume_if(|t| t == &SemiColon) {
-                    self.error("return statement needs semicolon");
+                    error!("return statement needs semicolon");
                     return None;
                 }
 
@@ -129,7 +127,7 @@ impl AstBuilder {
 
             Fn | LeftBrace | RightBrace | RightParen | SemiColon | Comma | Colon | WhiteSpace
             | Equals | EOF | Class | Plus | Asterisk => {
-                self.error(&format!("not expresion {:?}", token));
+                error!("not expresion {:?}", token);
                 None
             }
         }
@@ -146,7 +144,7 @@ impl AstBuilder {
             if let Some(expr) = self.parse_expr(token) {
                 args.push(expr);
             } else {
-                self.error("parsing args error");
+                error!("parsing args error");
             }
             if self.consume_if(|t| t == &Comma) {
                 continue;
@@ -160,7 +158,7 @@ impl AstBuilder {
         self.consume_if(|t| t == &Fn);
         let name = self.next_if_name()?;
         if !self.consume_if(|t| t == &LeftParen) {
-            self.error("no left paren after function name");
+            error!("no left paren after function name");
             return None;
         }
         let mut params = Vec::new();
@@ -177,10 +175,7 @@ impl AstBuilder {
                 params.push(param_name);
                 continue;
             }
-            self.error(&format!(
-                "unexpected token {:?} while parsing fn header",
-                token
-            ));
+            error!("unexpected token {:?} while parsing fn header", token);
             break;
         }
 
@@ -192,8 +187,7 @@ impl AstBuilder {
     }
     fn parse_scope(&mut self) -> Vec<Node> {
         if !self.consume_if(|t| t == &LeftBrace) {
-            self.error("not left brace to start scope");
-            return Vec::new();
+            warn!("not left brace to start scope");
         }
 
         let mut scope = Vec::new();
@@ -213,7 +207,8 @@ impl AstBuilder {
             let args = self.parse_args();
 
             if !self.consume_if(|t| t == &SemiColon) {
-                self.error("No semicolon after function call");
+                error!("No semicolon after function call");
+                return None;
             }
             Some(Node::FnCall(FnCallAst { name, args }))
         } else if self.peek() == Some(&Equals) {
@@ -242,29 +237,35 @@ impl AstBuilder {
                 //whitespace cant be in at this point
                 WhiteSpace | Colon | SemiColon | Comma | LeftBrace | RightBrace | Equals
                 | LeftParen | RightParen | Return | Plus | Minus | Asterisk => {
-                    println!("unexpected lang syntax {:?}", token);
+                    warn!("unexpected lang syntax {:?}", token);
                     self.next();
                     None
                 }
                 Let => self.parse_var(),
                 StringLiteral(_) | NumberLiteral(_) => {
-                    self.error("literal in main ast branch");
+                    error!("literal in main ast branch");
                     self.next();
                     None
                 }
 
                 Fn => self.parse_function(),
-                True => Some(Node::BoolLiteral(true)),
-                False => Some(Node::BoolLiteral(false)),
+                True => {
+                    self.next();
+                    Some(Node::BoolLiteral(true))
+                }
+                False => {
+                    self.next();
+                    Some(Node::BoolLiteral(false))
+                }
                 EOF => break,
             };
             if let Some(node) = node {
                 self.tree.push(node);
             }
 
-            println!("tokens: {:?}", self.tokens);
+            debug!("tokens: {:?}", self.tokens);
         }
-        println!("ast: {:?}", self.tree);
+        debug!("ast: {:?}", self.tree);
         self.tree
     }
 }
@@ -325,12 +326,13 @@ impl AstBuilder {
             Token::LeftParen => {
                 let expr = self.parse_math_equasion(start)?;
                 if !self.consume_if(|t| t == &RightParen) {
-                    self.error("no closing parenthises for math expresion");
+                    error!("no closing parenthises for math expresion");
+                    return None;
                 }
                 Some(expr)
             }
             other => {
-                self.error(&format!("Unexpected token: {:?}", other));
+                error!("Unexpected token: {:?}", other);
                 None
             }
         }

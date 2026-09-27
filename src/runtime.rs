@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use log::{debug, error};
+
 use crate::ast::Node::*;
 use crate::ast::{MathSign, Node};
 use crate::functions::{Function, NativeFunction, NativeFunctionHeader, NonNativeFunction};
@@ -33,23 +35,23 @@ impl Runtime {
         &self.scope
     }
 
-    fn eval(&mut self, node: Node, errors: &mut ErrorLog) -> Option<Value> {
+    fn eval(&mut self, node: Node) -> Option<Value> {
         match node {
             Var(var_ast) => {
-                if let Some(value) = self.eval(var_ast.value, errors) {
+                if let Some(value) = self.eval(var_ast.value) {
                     let var = Variable { value };
                     if self
                         .get_current_scope_mut()
                         .add_var(var_ast.name.clone(), var)
                         .is_err()
                     {
-                        errors.error_string(format!(
+                        error!(
                             "variable {} already exists cannot crease",
                             var_ast.name
-                        ));
+                        );
                     }
                 } else {
-                    errors.error_string(format!("cant parse value of var {}", var_ast.name));
+                    error!("cant parse value of var {}", var_ast.name)
                 }
 
                 None
@@ -58,18 +60,18 @@ impl Runtime {
             VarRef(var) => self.get_current_scope().get_var_value(&var).cloned(),
             VarReasign { name, new_value } => {
                 let var = Variable {
-                    value: self.eval(*new_value, errors)?,
+                    value: self.eval(*new_value)?,
                 };
                 if self.get_current_scope_mut().update_var(&name, var).is_err() {
-                    errors.error_string(format!(
+                    error!(
                         "cannot reassign var {name} because it does not exist"
-                    ));
+                    );
                 }
                 None
             }
             NumberLiteral(num) => Some(Value::Number(num)),
             Class(_class) => {
-                println!("classes not implemented");
+                error!("classes not implemented");
                 None
             }
             FnDeclare(func) => {
@@ -82,10 +84,10 @@ impl Runtime {
                     ))
                     .is_err()
                 {
-                    errors.error_string(format!(
+                    error!(
                         "function {} already exists cannot create",
                         func.name
-                    ));
+                    );
                 }
 
                 None
@@ -98,7 +100,7 @@ impl Runtime {
 
                 let mut values = Vec::new();
                 for node in func_ast.args {
-                    if let Some(node) = self.eval(node, errors) {
+                    if let Some(node) = self.eval(node) {
                         values.push(node)
                     }
                 }
@@ -108,7 +110,7 @@ impl Runtime {
             BoolLiteral(b) => Some(Value::Bool(b)),
             Return(value) => {
                 let value = if let Some(value) = value {
-                    self.eval(*value, errors)
+                    self.eval(*value)
                 } else {
                     None
                 };
@@ -117,8 +119,8 @@ impl Runtime {
                 None
             }
             Math { left, op, right } => {
-                let left = self.eval(*left, errors);
-                let right = self.eval(*right, errors);
+                let left = self.eval(*left);
+                let right = self.eval(*right);
                 if let Some(left) = left
                     && let Some(right) = right
                 {
@@ -140,14 +142,10 @@ impl Runtime {
 
     pub fn run(mut self) -> Option<Value> {
         let nodes = std::mem::take(&mut self.nodes);
-        let mut error_handler = ErrorLog::new();
         for node in nodes {
-            self.eval(node, &mut error_handler);
-            if error_handler.has_new_error() {
-                println!("Error: {}", error_handler.get_last())
-            }
+            self.eval(node);
         }
-        println!("{self:?}");
+        debug!("{self:?}");
         self.return_value
     }
 }
@@ -296,34 +294,6 @@ impl Scope {
 pub struct AlreadyExists;
 #[derive(Debug)]
 struct DoesNotExist;
-
-struct ErrorLog {
-    errors: Vec<String>,
-    changed: bool,
-}
-impl ErrorLog {
-    fn new() -> Self {
-        Self {
-            errors: Vec::new(),
-            changed: false,
-        }
-    }
-    fn error_string(&mut self, error: String) {
-        self.errors.push(error);
-        self.changed = true
-    }
-    fn has_new_error(&mut self) -> bool {
-        if self.changed {
-            self.changed = false;
-            true
-        } else {
-            false
-        }
-    }
-    fn get_last(&self) -> &String {
-        self.errors.last().unwrap()
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct Variable {

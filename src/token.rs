@@ -1,5 +1,7 @@
 use std::{iter::Peekable, str::Chars};
 
+use log::{error, warn};
+
 use crate::token::Token::*;
 
 pub struct Lexer<'a> {
@@ -42,7 +44,7 @@ impl<'a> Lexer<'a> {
             next.push(c);
         }
         if self.file.peek().is_none() {
-            println!("cannot find char {s}");
+            error!("cannot find char {s}");
         }
 
         next
@@ -79,7 +81,7 @@ impl<'a> Lexer<'a> {
                 continue;
             }
 
-            println!("unknown token {}", current_str);
+            warn!("unknown token {}", current_str);
         }
         self.add_token(Token::EOF);
 

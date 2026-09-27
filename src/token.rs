@@ -32,16 +32,17 @@ impl<'a> Lexer<'a> {
     ///consumes raw_tokens upto and including s
     fn consume_until(&mut self, s: char) -> String {
         let mut next = String::new();
-        while let Some(c) = &self.file.peek() {
-            let c = **c;
+        while let Some(c) = &self.file.next() {
+            let c = *c;
 
             if c == s {
-                self.next();
                 break;
             }
 
-            self.next();
             next.push(c);
+        }
+        if self.file.peek().is_none() {
+            println!("cannot find char {s}");
         }
 
         next
@@ -63,9 +64,6 @@ impl<'a> Lexer<'a> {
             if current == '"' {
                 let string_lit = self.consume_until('"');
                 self.add_token(Token::StringLiteral(string_lit));
-                // if self.next().is_none() {
-                //     println!("unended string literal")
-                // }
                 continue;
             }
 
@@ -165,8 +163,8 @@ impl Token {
             '=' => Equals,
             '(' => LeftParen,
             ')' => RightParen,
-            '+' =>Plus,
-            '-'=>Minus,
+            '+' => Plus,
+            '-' => Minus,
             whitespace if is_whitespace(whitespace) => WhiteSpace,
             _ => return None,
         };
@@ -175,8 +173,8 @@ impl Token {
     pub fn is_name(&self) -> bool {
         matches!(self, Name(_))
     }
-    pub fn is_math_sign(&self)->bool{
-        matches!(self,Plus|Minus)
+    pub fn is_math_sign(&self) -> bool {
+        matches!(self, Plus | Minus)
     }
 }
 pub const KEY_WORD_LET: &str = "let";

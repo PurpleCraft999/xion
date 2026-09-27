@@ -172,10 +172,10 @@ impl Value {
         match self {
             Value::Bool(left) => match other {
                 Value::String(right) => Ok(Value::String(left.to_string() + right)),
-                Value::Bool(_) | Value::Number(_) => return Err(MathError::InvalidTypeRight),
+                Value::Bool(_) | Value::Number(_) => Err(MathError::InvalidTypeRight),
             },
             Value::Number(left) => match other {
-                Value::Bool(_) => return Err(MathError::InvalidTypeRight),
+                Value::Bool(_) => Err(MathError::InvalidTypeRight),
                 Value::Number(right) => Ok(Value::Number(*left + *right)),
                 Value::String(right) => Ok(Value::String(left.to_string() + right)),
             },

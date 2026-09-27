@@ -237,7 +237,6 @@ impl AstBuilder {
         let mut scope = Vec::new();
         while let Some(token) = self.next() {
             if token == RightBrace {
-                println!("THE SCOPE IS:     {:?}", scope);
                 break;
             }
             if let Some(var) = self.parse_expr(token) {

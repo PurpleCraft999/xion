@@ -1,0 +1,60 @@
+use crate::{ast::Node, runtime::{Runtime, Scope, Value, Variable}};
+
+#[derive(Debug, Clone)]
+pub enum Function {
+    NonNative(NonNativeFunction),
+    Native(NativeFunction),
+}
+impl Function {
+    pub fn call(&self, args: Vec<Value>,scope:Scope) -> Option<Value> {
+        match self {
+            Self::NonNative(f) => f.call(args,scope),
+            Self::Native(f) => (f.func)(args),
+        }
+    }
+}
+
+
+
+pub type NativeFunctionHeader = fn(Vec<Value>) -> Option<Value>;
+
+#[derive(Debug, Clone)]
+pub struct NativeFunction {
+    func: NativeFunctionHeader,
+}
+impl NativeFunction{
+    pub fn new(func:NativeFunctionHeader)->Self{
+        Self { func }
+    }
+
+
+
+}
+
+#[derive(Debug, Clone)]
+pub struct NonNativeFunction {
+    name: String,
+    params: Vec<String>,
+    body: Vec<Node>,
+}
+impl NonNativeFunction {
+    pub fn new(name:String,params:Vec<String>,body:Vec<Node>)->Self{
+        Self { name, params, body }
+    }
+    pub fn name(&self)->&str{
+        &self.name
+    }
+
+
+
+    fn call(&self, args: Vec<Value>,scope:Scope) -> Option<Value> {
+        let mut runtime = Runtime::with_scope_and_nodes(self.body.clone(), scope);
+        for (name, value) in self.params.iter().zip(args) {
+            runtime
+                .get_current_scope_mut()
+                .add_var(name.to_owned(), Variable::new(value))
+                .expect("this is safe because these are the first vars made");
+        }
+        runtime.run()
+    }
+}

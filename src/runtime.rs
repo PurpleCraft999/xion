@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::ast::Node;
 use crate::ast::Node::*;
+use crate::functions::{Function, NativeFunction, NativeFunctionHeader, NonNativeFunction};
 use crate::xion_std;
 
 #[derive(Debug, Clone)]
@@ -25,10 +26,10 @@ impl Runtime {
         }
     }
 
-    fn get_current_scope_mut(&mut self) -> &mut Scope {
+    pub fn get_current_scope_mut(&mut self) -> &mut Scope {
         &mut self.scope
     }
-    fn get_current_scope(&self) -> &Scope {
+    pub fn get_current_scope(&self) -> &Scope {
         &self.scope
     }
 
@@ -39,7 +40,8 @@ impl Runtime {
                     let var = Variable { value };
                     if self
                         .get_current_scope_mut()
-                        .add_var(var_ast.name.clone(), var).is_err()
+                        .add_var(var_ast.name.clone(), var)
+                        .is_err()
                     {
                         errors.error_string(format!(
                             "variable {} already exists cannot crease",
@@ -71,11 +73,15 @@ impl Runtime {
                 None
             }
             FnDeclare(func) => {
-                if self.get_current_scope_mut().add_func(NonNativeFunction {
-                    name: func.name.clone(),
-                    params: func.paramaters,
-                    body:func.body,
-                }).is_err() {
+                if self
+                    .get_current_scope_mut()
+                    .add_func(NonNativeFunction::new(
+                        func.name.clone(),
+                        func.paramaters,
+                        func.body,
+                    ))
+                    .is_err()
+                {
                     errors.error_string(format!(
                         "function {} already exists cannot create",
                         func.name
@@ -103,7 +109,7 @@ impl Runtime {
                 }
                 // func.call(args)
 
-                func.call(values,self.scope())
+                func.call(values, self.scope())
                 // } else {
                 //     println!("cannot find function {}",func_ast.name)
                 //     None
@@ -124,7 +130,7 @@ impl Runtime {
         }
     }
 
-    fn scope(&self)->Scope{
+    fn scope(&self) -> Scope {
         Scope::with_parent(self.get_current_scope().clone())
     }
 
@@ -178,7 +184,7 @@ impl Scope {
     }
     fn add_native_fn(&mut self, name: &str, func: NativeFunctionHeader) {
         self.functions
-            .insert(name.to_owned(), Function::Native(NativeFunction { func }));
+            .insert(name.to_owned(), Function::Native(NativeFunction::new(func)));
     }
 
     fn with_parent(scope: Scope) -> Self {
@@ -189,7 +195,7 @@ impl Scope {
         }
     }
 
-    fn add_var(&mut self, name: String, var: Variable) -> Result<(), AlreadyExists> {
+    pub fn add_var(&mut self, name: String, var: Variable) -> Result<(), AlreadyExists> {
         if self.vars.contains_key(&name) {
             return Err(AlreadyExists);
         }
@@ -204,18 +210,21 @@ impl Scope {
         // }
 
         match self.vars.get_mut(name) {
-            Some(value) => {*value = var;Ok(())},
+            Some(value) => {
+                *value = var;
+                Ok(())
+            }
             None => Err(DoesNotExist),
         }
     }
 
     fn add_func(&mut self, func: NonNativeFunction) -> Result<(), AlreadyExists> {
-        if self.functions.contains_key(&func.name) {
+        if self.functions.contains_key(func.name()) {
             return Err(AlreadyExists);
         }
 
         self.functions
-            .insert(func.name.clone(), Function::NonNative(func));
+            .insert(func.name().to_owned(), Function::NonNative(func));
         Ok(())
     }
 
@@ -242,7 +251,7 @@ impl Scope {
 }
 
 #[derive(Debug)]
-struct AlreadyExists;
+pub struct AlreadyExists;
 #[derive(Debug)]
 struct DoesNotExist;
 
@@ -279,46 +288,15 @@ impl ErrorLog {
 }
 
 #[derive(Debug, Clone)]
-pub enum Function {
-    NonNative(NonNativeFunction),
-    Native(NativeFunction),
-}
-impl Function {
-    fn call(&self, args: Vec<Value>,scope:Scope) -> Option<Value> {
-        match self {
-            Self::NonNative(f) => f.call(args,scope),
-            Self::Native(f) => (f.func)(args),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
 pub struct Variable {
     value: Value,
 }
-
-pub type NativeFunctionHeader = fn(Vec<Value>) -> Option<Value>;
-
-#[derive(Debug, Clone)]
-pub struct NativeFunction {
-    func: NativeFunctionHeader,
-}
-
-#[derive(Debug, Clone)]
-pub struct NonNativeFunction {
-    name: String,
-    params: Vec<String>,
-    body: Vec<Node>,
-}
-impl NonNativeFunction {
-    fn call(&self, args: Vec<Value>,scope:Scope) -> Option<Value> {
-        let mut runtime = Runtime::with_scope_and_nodes(self.body.clone(), scope);
-        for (name, value) in self.params.iter().zip(args) {
-            runtime
-                .scope
-                .add_var(name.to_owned(), Variable { value })
-                .expect("this is safe because these are the first vars made");
-        }
-        runtime.run()
+impl Variable{
+    pub fn new(value:Value)->Self{
+        Self { value }
     }
+
+
+
+
 }

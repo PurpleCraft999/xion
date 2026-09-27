@@ -147,6 +147,14 @@ impl AstBuilder {
                     right: Box::new(self.parse_expr(next_token)?),
                 }
             }
+            Minus => {
+                let next_token = self.next()?;
+                Node::Math {
+                    left: Box::new(self.previous_node()?.clone()),
+                    op: MathSign::Minus,
+                    right: Box::new(self.parse_expr(next_token)?),
+                }
+            }
 
             Let => self.parse_var()?,
             True => Node::BoolLiteral(true),
@@ -275,7 +283,7 @@ impl AstBuilder {
                 //never meant to be read here
                 //whitespace cant be in at this point
                 WhiteSpace | Colon | SemiColon | Comma | LeftBrace | RightBrace | Equals
-                | LeftParen | RightParen | Return | Plus => {
+                | LeftParen | RightParen | Return | Plus | Minus => {
                     // self.error(&format!("unexpected lang syntax {:?}", token));
                     self.next();
                     None

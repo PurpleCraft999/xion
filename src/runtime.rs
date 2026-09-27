@@ -135,7 +135,7 @@ impl Runtime {
                 {
                     Some(match op {
                         MathSign::Plus => left.add(&right).ok()?,
-                        MathSign::Minus=>unimplemented!("minus")
+                        MathSign::Minus => left.sub(&right).ok()?,
                     })
                 } else {
                     None
@@ -169,29 +169,32 @@ pub enum Value {
 }
 impl Value {
     fn add(&self, other: &Value) -> Result<Value, MathError> {
-        let restult = match self {
-            Value::Bool(_) => return Err(MathError::InvalidTypeLeft),
+        match self {
+            Value::Bool(left) => match other {
+                Value::String(right) => Ok(Value::String(left.to_string() + right)),
+                Value::Bool(_) | Value::Number(_) => return Err(MathError::InvalidTypeRight),
+            },
             Value::Number(left) => match other {
                 Value::Bool(_) => return Err(MathError::InvalidTypeRight),
-                Value::Number(right) => Value::Number(*left + *right),
-                Value::String(right) => Value::String(left.to_string() + right),
+                Value::Number(right) => Ok(Value::Number(*left + *right)),
+                Value::String(right) => Ok(Value::String(left.to_string() + right)),
             },
             Value::String(left) => match other {
-                Value::Bool(_) => return Err(MathError::InvalidTypeRight),
-                Value::Number(right) => Value::String(left.to_owned() + &(right.to_string())),
-                Value::String(right) => Value::String(left.to_owned() + right),
+                Value::Bool(right) => Ok(Value::String(left.to_owned() + &(right.to_string()))),
+                Value::Number(right) => Ok(Value::String(left.to_owned() + &(right.to_string()))),
+                Value::String(right) => Ok(Value::String(left.to_owned() + right)),
             },
-        };
-        Ok(restult)
+        }
     }
-    // fn sub(&self,other: &Value)->Result<Value,MathError>{
-
-
-
-
-
-
-    // }
+    fn sub(&self, other: &Value) -> Result<Value, MathError> {
+        match self {
+            Value::Bool(_) | Value::String(_) => Err(MathError::InvalidTypeLeft),
+            Value::Number(left) => match other {
+                Value::Bool(_) | Value::String(_) => Err(MathError::InvalidTypeRight),
+                Value::Number(right) => Ok(Value::Number(*left - *right)),
+            },
+        }
+    }
 }
 #[derive(Debug, Clone)]
 enum MathError {

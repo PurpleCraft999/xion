@@ -37,9 +37,9 @@ impl Runtime {
             Var(var_ast) => {
                 if let Some(value) = self.eval(var_ast.value, errors) {
                     let var = Variable { value };
-                    if let Err(_) = self
+                    if self
                         .get_current_scope_mut()
-                        .add_var(var_ast.name.clone(), var)
+                        .add_var(var_ast.name.clone(), var).is_err()
                     {
                         errors.error_string(format!(
                             "variable {} already exists cannot crease",
@@ -58,7 +58,7 @@ impl Runtime {
                 let var = Variable {
                     value: self.eval(*new_value, errors)?,
                 };
-                if let Err(_) = self.get_current_scope_mut().update_var(&name, var) {
+                if self.get_current_scope_mut().update_var(&name, var).is_err() {
                     errors.error_string(format!(
                         "cannot reassign var {name} because it does not exist"
                     ));
@@ -72,11 +72,11 @@ impl Runtime {
             }
             FnDeclare(func) => {
                 let body = self.child_runtime(func.body);
-                if let Err(_) = self.get_current_scope_mut().add_func(NonNativeFunction {
+                if self.get_current_scope_mut().add_func(NonNativeFunction {
                     name: func.name.clone(),
                     params: func.paramaters,
-                    body: body,
-                }) {
+                    body,
+                }).is_err() {
                     errors.error_string(format!(
                         "function {} already exists cannot create",
                         func.name
@@ -205,7 +205,7 @@ impl Scope {
         // }
 
         match self.vars.get_mut(name) {
-            Some(value) => Ok(*value = var),
+            Some(value) => {*value = var;Ok(())},
             None => Err(DoesNotExist),
         }
     }
@@ -314,7 +314,7 @@ pub struct NonNativeFunction {
 impl NonNativeFunction {
     fn call(&self, args: Vec<Value>) -> Option<Value> {
         let mut runtime = self.body.clone();
-        for (name, value) in self.params.iter().zip(args.into_iter()) {
+        for (name, value) in self.params.iter().zip(args) {
             runtime
                 .scope
                 .add_var(name.to_owned(), Variable { value })

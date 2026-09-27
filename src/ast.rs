@@ -106,10 +106,7 @@ impl AstBuilder {
             Return => {
                 let token = self.next();
                 let return_value = if let Some(value) = token {
-                    match self.parse_expr(value) {
-                        Some(v) => Some(Box::new(v)),
-                        None => None,
-                    }
+                     self.parse_expr(value).map(Box::new)
                 } else {
                     None
                 };

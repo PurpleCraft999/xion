@@ -1,0 +1,12 @@
+let my_var = 50;
+print(my_var);
+my_var = 30;
+print(my_var);
+
+
+fn test() {
+    let y = "y";
+    print(y);
+    return y;
+};
+print(test());

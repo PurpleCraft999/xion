@@ -54,7 +54,7 @@ impl<'a> Lexer<'a> {
     pub fn lex(mut self) -> Vec<Token> {
         while let Some(current) = self.next() {
             //comments
-            if current=='#'{
+            if current == '#' {
                 self.consume_until('\n');
                 continue;
             }
@@ -129,7 +129,7 @@ pub enum Token {
     NumberLiteral(i64),
     Class,
     True,
-    False
+    False,
 }
 
 impl Token {
@@ -138,9 +138,9 @@ impl Token {
             KEY_WORD_LET => Let,
             KEY_WORD_CLASS => Class,
             "fn" | "func" => Fn,
-            "return"=>Return,
-            "true"=>True,
-            "false"=>False,
+            "return" => Return,
+            "true" => True,
+            "false" => False,
             number if let Ok(num) = number.parse::<i64>() => NumberLiteral(num),
             name if !s.starts_with(|c: char| c.is_numeric())
                 && s.chars().all(|c| c.is_alphanumeric() || c == '_') =>

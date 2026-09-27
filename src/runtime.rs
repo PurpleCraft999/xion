@@ -15,19 +15,15 @@ impl Runtime {
         let mut scope = Scope::new();
         scope.attach_std_lib();
 
-
-
         Self::with_scope_and_nodes(nodes, scope)
     }
-    pub fn with_scope_and_nodes(nodes: Vec<Node>,scope:Scope)->Self{
-        Self{
+    pub fn with_scope_and_nodes(nodes: Vec<Node>, scope: Scope) -> Self {
+        Self {
             nodes,
             scope,
-            return_value:None,
+            return_value: None,
         }
     }
-
-
 
     fn get_current_scope_mut(&mut self) -> &mut Scope {
         &mut self.scope
@@ -36,17 +32,20 @@ impl Runtime {
         &self.scope
     }
 
-    fn eval(&mut self, node: Node,errors:&mut ErrorLog) -> Option<Value> {
+    fn eval(&mut self, node: Node, errors: &mut ErrorLog) -> Option<Value> {
         match node {
             Var(var_ast) => {
-                if let Some(value) = self.eval(var_ast.value,errors) {
-                    let var = Variable {
-                        name: var_ast.name.clone(),
-                        value,
-                    };
-                     if let Err(_) = self.get_current_scope_mut().add_var(var){
-                        errors.error_string(format!("variable {} already exists cannot crease",var_ast.name));
-                     }
+                if let Some(value) = self.eval(var_ast.value, errors) {
+                    let var = Variable { value };
+                    if let Err(_) = self
+                        .get_current_scope_mut()
+                        .add_var(var_ast.name.clone(), var)
+                    {
+                        errors.error_string(format!(
+                            "variable {} already exists cannot crease",
+                            var_ast.name
+                        ));
+                    }
                 } else {
                     errors.error_string(format!("cant parse value of var {}", var_ast.name));
                 }
@@ -55,6 +54,17 @@ impl Runtime {
             }
             StringLiteral(str) => Some(Value::String(str)),
             VarRef(var) => self.get_current_scope().get_var_value(&var).cloned(),
+            VarReasign { name, new_value } => {
+                let var = Variable {
+                    value: self.eval(*new_value, errors)?,
+                };
+                if let Err(_) = self.get_current_scope_mut().update_var(&name, var) {
+                    errors.error_string(format!(
+                        "cannot reassign var {name} because it does not exist"
+                    ));
+                }
+                None
+            }
             NumberLiteral(num) => Some(Value::Number(num)),
             Class(_class) => {
                 println!("classes not implemented");
@@ -63,14 +73,14 @@ impl Runtime {
             FnDeclare(func) => {
                 let body = self.child_runtime(func.body);
                 if let Err(_) = self.get_current_scope_mut().add_func(NonNativeFunction {
-                    name:func.name.clone(),
+                    name: func.name.clone(),
                     params: func.paramaters,
                     body: body,
-                }){
-                    errors.error_string(format!("function {} already exists cannot create",func.name));
-
-
-
+                }) {
+                    errors.error_string(format!(
+                        "function {} already exists cannot create",
+                        func.name
+                    ));
                 }
 
                 None
@@ -88,7 +98,7 @@ impl Runtime {
                 // {
                 let mut values = Vec::new();
                 for node in func_ast.args {
-                    if let Some(node) = self.eval(node,errors) {
+                    if let Some(node) = self.eval(node, errors) {
                         values.push(node)
                     }
                 }
@@ -101,10 +111,10 @@ impl Runtime {
                 // }
                 // None
             }
-            BoolLiteral(b)=>Some(Value::Bool(b)),
+            BoolLiteral(b) => Some(Value::Bool(b)),
             Return(value) => {
                 let value = if let Some(value) = value {
-                    self.eval(*value,errors)
+                    self.eval(*value, errors)
                 } else {
                     None
                 };
@@ -124,9 +134,9 @@ impl Runtime {
         let nodes = std::mem::take(&mut self.nodes);
         let mut error_handler = ErrorLog::new();
         for node in nodes {
-            self.eval(node,&mut error_handler);
-            if error_handler.has_new_error(){
-                println!("Error: {}",error_handler.get_last())
+            self.eval(node, &mut error_handler);
+            if error_handler.has_new_error() {
+                println!("Error: {}", error_handler.get_last())
             }
         }
         println!("{self:?}");
@@ -139,14 +149,14 @@ pub enum Value {
     Number(i64),
     Bool(bool),
 }
-impl std::fmt::Display for Value{
+impl std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let string_value = match self{
-            Self::Bool(b)=>b.to_string(),
-            Self::Number(n)=>n.to_string(),
-            Self::String(s)=>s.to_owned()
+        let string_value = match self {
+            Self::Bool(b) => b.to_string(),
+            Self::Number(n) => n.to_string(),
+            Self::String(s) => s.to_owned(),
         };
-        write!(f,"{string_value}")
+        write!(f, "{string_value}")
     }
 }
 
@@ -164,27 +174,13 @@ impl Scope {
             functions: HashMap::new(),
         }
     }
-    fn attach_std_lib(&mut self){
-
+    fn attach_std_lib(&mut self) {
         self.add_native_fn("print", xion_std::print);
-
-
-
-
-
-
     }
-    fn add_native_fn(&mut self,name: &str,func:NativeFunctionHeader){
-
-        self.functions.insert(name.to_owned(), Function::Native(NativeFunction { func }));
-
-
+    fn add_native_fn(&mut self, name: &str, func: NativeFunctionHeader) {
+        self.functions
+            .insert(name.to_owned(), Function::Native(NativeFunction { func }));
     }
-
-
-
-
-
 
     fn with_parent(scope: Scope) -> Self {
         Self {
@@ -194,25 +190,33 @@ impl Scope {
         }
     }
 
-    fn add_var(&mut self, var: Variable)->Result<(),AlreadyExists> {
-        if self.vars.contains_key(&var.name){
-
+    fn add_var(&mut self, name: String, var: Variable) -> Result<(), AlreadyExists> {
+        if self.vars.contains_key(&name) {
             return Err(AlreadyExists);
         }
 
-
-
-        self.vars.insert(var.name.clone(), var);
+        self.vars.insert(name, var);
         Ok(())
     }
-    fn add_func(&mut self, func: NonNativeFunction) ->Result<(), AlreadyExists>{
-        if self.functions.contains_key(&func.name){
 
+    fn update_var(&mut self, name: &str, var: Variable) -> Result<(), DoesNotExist> {
+        // if !self.vars.contains_key(name){
+        //     return Err(DoesNotExist);
+        // }
+
+        match self.vars.get_mut(name) {
+            Some(value) => Ok(*value = var),
+            None => Err(DoesNotExist),
+        }
+    }
+
+    fn add_func(&mut self, func: NonNativeFunction) -> Result<(), AlreadyExists> {
+        if self.functions.contains_key(&func.name) {
             return Err(AlreadyExists);
         }
 
-
-        self.functions.insert(func.name.clone(), Function::NonNative(func));
+        self.functions
+            .insert(func.name.clone(), Function::NonNative(func));
         Ok(())
     }
 
@@ -240,83 +244,66 @@ impl Scope {
 
 #[derive(Debug)]
 struct AlreadyExists;
+#[derive(Debug)]
+struct DoesNotExist;
 
-
-struct ErrorLog{
-    errors:Vec<String>,
-    changed:bool
+struct ErrorLog {
+    errors: Vec<String>,
+    changed: bool,
 }
-impl ErrorLog{
-    fn new()->Self{
-        Self { errors: Vec::new(),changed:false }
+impl ErrorLog {
+    fn new() -> Self {
+        Self {
+            errors: Vec::new(),
+            changed: false,
+        }
     }
     // fn error(&mut self,error:&str){
     //     self.errors.push(error.to_owned());
     //     self.changed=true
     // }
-    fn error_string(&mut self,error:String){
+    fn error_string(&mut self, error: String) {
         self.errors.push(error);
-        self.changed=true
+        self.changed = true
     }
-    fn has_new_error(&mut self)->bool{
-        if self.changed{
-
-            self.changed=false;
+    fn has_new_error(&mut self) -> bool {
+        if self.changed {
+            self.changed = false;
             true
-        } else{
+        } else {
             false
         }
     }
-    fn get_last(&self)->&String{
+    fn get_last(&self) -> &String {
         self.errors.last().unwrap()
     }
-
-
-
-
 }
 
-
-
-#[derive(Debug,Clone)]
-pub enum Function{
+#[derive(Debug, Clone)]
+pub enum Function {
     NonNative(NonNativeFunction),
     Native(NativeFunction),
 }
-impl Function{
-    fn call(&self,args:Vec<Value>)->Option<Value>{
-        match self{
-            Self::NonNative(f)=>f.call(args),
-            Self::Native(f)=>(f.func)(args)
+impl Function {
+    fn call(&self, args: Vec<Value>) -> Option<Value> {
+        match self {
+            Self::NonNative(f) => f.call(args),
+            Self::Native(f) => (f.func)(args),
         }
-
-
     }
-
-
-
 }
-
-
-
 
 #[derive(Debug, Clone)]
 pub struct Variable {
-    name: String,
     value: Value,
 }
 
+pub type NativeFunctionHeader = fn(Vec<Value>) -> Option<Value>;
 
-pub type NativeFunctionHeader = fn(Vec<Value>)->Option<Value>;
-
-#[derive(Debug,Clone)]
-pub struct NativeFunction{
-    func:NativeFunctionHeader
+#[derive(Debug, Clone)]
+pub struct NativeFunction {
+    func: NativeFunctionHeader,
 }
-
-
-
-
 
 #[derive(Debug, Clone)]
 pub struct NonNativeFunction {
@@ -328,10 +315,10 @@ impl NonNativeFunction {
     fn call(&self, args: Vec<Value>) -> Option<Value> {
         let mut runtime = self.body.clone();
         for (name, value) in self.params.iter().zip(args.into_iter()) {
-            runtime.scope.add_var(Variable {
-                name: name.clone(),
-                value,
-            }).expect("this is safe because these are the first vars made");
+            runtime
+                .scope
+                .add_var(name.to_owned(), Variable { value })
+                .expect("this is safe because these are the first vars made");
         }
         runtime.run()
     }

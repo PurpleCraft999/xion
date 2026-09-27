@@ -1,6 +1,6 @@
 use std::iter::Peekable;
 
-use crate::{ast::Node::BoolLiteral, token::Token::{self, *}};
+use crate::token::Token::{self, *};
 
 pub struct AstBuilder {
     tokens: Peekable<std::vec::IntoIter<Token>>,
@@ -99,11 +99,9 @@ impl AstBuilder {
         Some(Node::Var(Box::new(VarAst { name, value })))
     }
     fn parse_expr(&mut self, token: Token) -> Option<Node> {
-        // self.consume_whitespace();
-
         let node = match token {
             StringLiteral(name) => Node::StringLiteral(name),
-            Name(name) => self.parse_name(name),
+            Name(name) => self.parse_name(name)?,
             NumberLiteral(num) => Node::NumberLiteral(num),
             Return => {
                 let token = self.next();
@@ -115,13 +113,19 @@ impl AstBuilder {
                 } else {
                     None
                 };
+                if !self.consume_if(|t| t == &SemiColon) {
+                    self.error("return statement needs semicolon");
+                    return None;
+                }
+
                 Node::Return(return_value)
             }
             Let => self.parse_var()?,
-            True=>Node::BoolLiteral(true),
-            False=>Node::BoolLiteral(false),
+            True => Node::BoolLiteral(true),
+            False => Node::BoolLiteral(false),
 
-            Fn|LeftBrace|RightBrace|LeftParen|RightParen|SemiColon|Comma|Colon|WhiteSpace|Equals|EOF|Class => {
+            Fn | LeftBrace | RightBrace | LeftParen | RightParen | SemiColon | Comma | Colon
+            | WhiteSpace | Equals | EOF | Class => {
                 self.error(&format!("not expresion {:?}", token));
                 return None;
             }
@@ -150,7 +154,7 @@ impl AstBuilder {
     }
 
     fn parse_function(&mut self) -> Option<Node> {
-        self.consume_if(|t|t==&Fn);
+        self.consume_if(|t| t == &Fn);
         let name = self.next_if_name()?;
         if !self.consume_if(|t| t == &LeftParen) {
             self.error("no left paren after function name");
@@ -197,25 +201,33 @@ impl AstBuilder {
         let mut scope = Vec::new();
         while let Some(token) = self.next() {
             if token == RightBrace {
+                println!("THE SCOPE IS:     {:?}", scope);
                 break;
             }
-            if let Some(next) = self.next() {
-                if let Some(var) = self.parse_expr(next) {
-                    scope.push(var);
-                }
+            if let Some(var) = self.parse_expr(token) {
+                scope.push(var);
             }
         }
 
         scope
     }
-    fn parse_name(&mut self, name: String) -> Node {
+    fn parse_name(&mut self, name: String) -> Option<Node> {
         if self.peek() == Some(&LeftParen) {
-            Node::FnCall(FnCallAst {
+            let args = self.parse_args();
+
+            if !self.consume_if(|t| t == &SemiColon) {
+                self.error("No semicolon after function call");
+            }
+            Some(Node::FnCall(FnCallAst { name, args }))
+        } else if self.peek() == Some(&Equals) {
+            self.next();
+            let new_value = self.next()?;
+            Some(Node::VarReasign {
                 name,
-                args: self.parse_args(),
+                new_value: Box::new(self.parse_expr(new_value)?),
             })
         } else {
-            Node::VarRef(name)
+            Some(Node::VarRef(name))
         }
     }
 
@@ -225,8 +237,10 @@ impl AstBuilder {
                 Class => self.parse_class(),
                 Name(_) => {
                     // self.tokens.next_back()
-                    let name = self.next_if_name().expect("we are matching the name branch of the node");
-                    Some(self.parse_name(name))
+                    let name = self
+                        .next_if_name()
+                        .expect("we are matching the name branch of the node");
+                    self.parse_name(name)
 
                     // self.error("unexpeced name");
                 }
@@ -245,8 +259,8 @@ impl AstBuilder {
                     None
                 }
                 Fn => self.parse_function(),
-                True=>Some(BoolLiteral(true)),
-                False=>Some(BoolLiteral(false)),
+                True => Some(Node::BoolLiteral(true)),
+                False => Some(Node::BoolLiteral(false)),
                 EOF => break,
             };
             if let Some(node) = node {
@@ -272,6 +286,10 @@ pub enum Node {
     ///name of var
     VarRef(String),
     FnCall(FnCallAst),
+    VarReasign {
+        name: String,
+        new_value: Box<Node>,
+    },
 
     FnDeclare(FunctionDefAst),
     Return(Option<Box<Node>>),

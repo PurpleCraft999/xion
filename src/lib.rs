@@ -1,4 +1,4 @@
 pub mod ast;
-pub mod token;
 pub mod runtime;
+pub mod token;
 mod xion_std;

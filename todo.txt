@@ -4,7 +4,11 @@ classes
 
 add properties to types and methods
 
-modules arrays
+modules
+consider merging two arrays with +
+if statements
+while loops
+for loops
 function arg len checking
 conversion functions for types
 Array Type

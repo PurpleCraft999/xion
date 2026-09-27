@@ -1,0 +1,4 @@
+let arr = [50,100,"hello",true];
+
+
+print(arr);

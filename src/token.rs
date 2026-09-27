@@ -99,6 +99,8 @@ pub enum Token {
     RightBrace,
     LeftParen,
     RightParen,
+    LeftBracket,
+    RightBracket,
     SemiColon,
     Colon,
     Fn,
@@ -144,6 +146,8 @@ impl Token {
         let token = match c {
             '{' => LeftBrace,
             '}' => RightBrace,
+            '[' => LeftBracket,
+            ']' => RightBracket,
             ';' => SemiColon,
             ':' => Colon,
             ',' => Comma,

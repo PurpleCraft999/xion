@@ -45,10 +45,7 @@ impl Runtime {
                         .add_var(var_ast.name.clone(), var)
                         .is_err()
                     {
-                        error!(
-                            "variable {} already exists cannot crease",
-                            var_ast.name
-                        );
+                        error!("variable {} already exists cannot crease", var_ast.name);
                     }
                 } else {
                     error!("cant parse value of var {}", var_ast.name)
@@ -63,9 +60,7 @@ impl Runtime {
                     value: self.eval(*new_value)?,
                 };
                 if self.get_current_scope_mut().update_var(&name, var).is_err() {
-                    error!(
-                        "cannot reassign var {name} because it does not exist"
-                    );
+                    error!("cannot reassign var {name} because it does not exist");
                 }
                 None
             }
@@ -84,10 +79,7 @@ impl Runtime {
                     ))
                     .is_err()
                 {
-                    error!(
-                        "function {} already exists cannot create",
-                        func.name
-                    );
+                    error!("function {} already exists cannot create", func.name);
                 }
 
                 None
@@ -133,6 +125,9 @@ impl Runtime {
                     None
                 }
             }
+            ArrayLiteral(vec) => Some(Value::Array(
+                vec.into_iter().map_while(|n| self.eval(n)).collect(),
+            )),
         }
     }
 
@@ -154,16 +149,19 @@ pub enum Value {
     String(String),
     Number(i64),
     Bool(bool),
+    Array(Vec<Value>),
 }
 impl Value {
     fn add(&self, other: &Value) -> Result<Value, MathError> {
         match self {
             Value::Bool(left) => match other {
                 Value::String(right) => Ok(Value::String(left.to_string() + right)),
-                Value::Bool(_) | Value::Number(_) => Err(MathError::InvalidTypeRight),
+                Value::Bool(_) | Value::Number(_) | Value::Array(_) => {
+                    Err(MathError::InvalidTypeRight)
+                }
             },
             Value::Number(left) => match other {
-                Value::Bool(_) => Err(MathError::InvalidTypeRight),
+                Value::Bool(_) | Value::Array(_) => Err(MathError::InvalidTypeRight),
                 Value::Number(right) => Ok(Value::Number(*left + *right)),
                 Value::String(right) => Ok(Value::String(left.to_string() + right)),
             },
@@ -171,32 +169,49 @@ impl Value {
                 Value::Bool(right) => Ok(Value::String(left.to_owned() + &(right.to_string()))),
                 Value::Number(right) => Ok(Value::String(left.to_owned() + &(right.to_string()))),
                 Value::String(right) => Ok(Value::String(left.to_owned() + right)),
+                Value::Array(right) => Ok(Value::String(left.to_owned() + &vec_to_string(right))),
+            },
+            Value::Array(left) => match other {
+                Value::Bool(_) | Value::Number(_) | Value::Array(_) => {
+                    Err(MathError::InvalidTypeRight)
+                }
+                Value::String(right) => Ok(Value::String(vec_to_string(left) + right)),
             },
         }
     }
     fn sub(&self, other: &Value) -> Result<Value, MathError> {
         match self {
-            Value::Bool(_) | Value::String(_) => Err(MathError::InvalidTypeLeft),
+            Value::Bool(_) | Value::String(_) | Value::Array(_) => Err(MathError::InvalidTypeLeft),
             Value::Number(left) => match other {
-                Value::Bool(_) | Value::String(_) => Err(MathError::InvalidTypeRight),
+                Value::Bool(_) | Value::String(_) | Value::Array(_) => {
+                    Err(MathError::InvalidTypeRight)
+                }
                 Value::Number(right) => Ok(Value::Number(*left - *right)),
             },
         }
     }
     fn mul(&self, other: &Value) -> Result<Value, MathError> {
         match self {
-            Value::Bool(_) | Value::String(_) => Err(MathError::InvalidTypeLeft),
+            Value::Bool(_) | Value::String(_) | Value::Array(_) => Err(MathError::InvalidTypeLeft),
             Value::Number(left) => match other {
-                Value::Bool(_) | Value::String(_) => Err(MathError::InvalidTypeRight),
+                Value::Bool(_) | Value::String(_) | Value::Array(_) => {
+                    Err(MathError::InvalidTypeRight)
+                }
                 Value::Number(right) => Ok(Value::Number(*left * *right)),
             },
         }
     }
 }
-#[derive(Debug, Clone)]
-enum MathError {
-    InvalidTypeLeft,
-    InvalidTypeRight,
+
+fn vec_to_string<T: ToString>(vec: &Vec<T>) -> String {
+    let mut vec_str = String::from('[');
+    for item in vec {
+        vec_str += &item.to_string();
+        vec_str.push(',');
+    }
+    vec_str.pop();
+    vec_str.push(']');
+    vec_str
 }
 
 impl std::fmt::Display for Value {
@@ -205,9 +220,16 @@ impl std::fmt::Display for Value {
             Self::Bool(b) => b.to_string(),
             Self::Number(n) => n.to_string(),
             Self::String(s) => s.to_owned(),
+            Self::Array(v) => vec_to_string(v),
         };
         write!(f, "{string_value}")
     }
+}
+
+#[derive(Debug, Clone)]
+enum MathError {
+    InvalidTypeLeft,
+    InvalidTypeRight,
 }
 
 #[derive(Debug, Clone)]

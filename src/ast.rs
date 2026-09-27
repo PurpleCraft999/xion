@@ -120,14 +120,15 @@ impl AstBuilder {
                 }
                 _ => None,
             },
+            LeftBracket => self.parse_array(),
 
             Let => self.parse_var(),
             True => Some(Node::BoolLiteral(true)),
             False => Some(Node::BoolLiteral(false)),
 
             Fn | LeftBrace | RightBrace | RightParen | SemiColon | Comma | Colon | WhiteSpace
-            | Equals | EOF | Class | Plus | Asterisk => {
-                error!("not expresion {:?}", token);
+            | Equals | EOF | Class | Plus | Asterisk | RightBracket => {
+                error!("unexpected expresion while parsing expresion: {:?}", token);
                 None
             }
         }
@@ -152,6 +153,27 @@ impl AstBuilder {
         }
 
         args
+    }
+    fn parse_array(&mut self) -> Option<Node> {
+        self.consume_if(|t| t == &LeftBracket);
+
+        let mut vec = Vec::new();
+
+        while let Some(token) = self.next() {
+            if token == RightBracket {
+                break;
+            }
+            if let Some(expr) = self.parse_expr(token) {
+                vec.push(expr);
+            } else {
+                error!("parsing array literal value error");
+            }
+            if self.consume_if(|t| t == &Comma) {
+                continue;
+            }
+        }
+
+        Some(Node::ArrayLiteral(vec))
     }
 
     fn parse_function(&mut self) -> Option<Node> {
@@ -236,7 +258,8 @@ impl AstBuilder {
                 //never meant to be read here
                 //whitespace cant be in at this point
                 WhiteSpace | Colon | SemiColon | Comma | LeftBrace | RightBrace | Equals
-                | LeftParen | RightParen | Return | Plus | Minus | Asterisk => {
+                | LeftParen | RightParen | Return | Plus | Minus | Asterisk | LeftBracket
+                | RightBracket => {
                     warn!("unexpected lang syntax {:?}", token);
                     self.next();
                     None
@@ -346,6 +369,7 @@ pub enum Node {
     StringLiteral(String),
     NumberLiteral(i64),
     BoolLiteral(bool),
+    ArrayLiteral(Vec<Node>),
     ///name of var
     VarRef(String),
     FnCall(FnCallAst),

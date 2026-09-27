@@ -21,6 +21,9 @@ impl AstBuilder {
     fn peek(&mut self) -> Option<&Token> {
         self.tokens.peek()
     }
+    fn previous_node(&self) -> Option<&Node> {
+        self.tree.last()
+    }
 
     fn error(&self, err: &str) {
         println!("error: {}", err)
@@ -100,13 +103,32 @@ impl AstBuilder {
     }
     fn parse_expr(&mut self, token: Token) -> Option<Node> {
         let node = match token {
-            StringLiteral(name) => Node::StringLiteral(name),
+            StringLiteral(name) => {
+                //strings only support addition
+                if self.peek() == Some(&Plus) {
+                    self.tree.push(Node::StringLiteral(name));
+                    let n = self.next()?;
+                    self.parse_expr(n)?
+                } else {
+                    Node::StringLiteral(name)
+                }
+            }
             Name(name) => self.parse_name(name)?,
-            NumberLiteral(num) => Node::NumberLiteral(num),
+            NumberLiteral(num) => {
+                if let Some(sign) = self.peek()
+                    && sign.is_math_sign()
+                {
+                    self.tree.push(Node::NumberLiteral(num));
+                    let n = self.next()?;
+                    self.parse_expr(n)?
+                } else {
+                    Node::NumberLiteral(num)
+                }
+            }
             Return => {
                 let token = self.next();
                 let return_value = if let Some(value) = token {
-                     self.parse_expr(value).map(Box::new)
+                    self.parse_expr(value).map(Box::new)
                 } else {
                     None
                 };
@@ -117,6 +139,15 @@ impl AstBuilder {
 
                 Node::Return(return_value)
             }
+            Plus => {
+                let next_token = self.next()?;
+                Node::Math {
+                    left: Box::new(self.previous_node()?.clone()),
+                    op: MathSign::Plus,
+                    right: Box::new(self.parse_expr(next_token)?),
+                }
+            }
+
             Let => self.parse_var()?,
             True => Node::BoolLiteral(true),
             False => Node::BoolLiteral(false),
@@ -244,7 +275,7 @@ impl AstBuilder {
                 //never meant to be read here
                 //whitespace cant be in at this point
                 WhiteSpace | Colon | SemiColon | Comma | LeftBrace | RightBrace | Equals
-                | LeftParen | RightParen | Return => {
+                | LeftParen | RightParen | Return | Plus => {
                     // self.error(&format!("unexpected lang syntax {:?}", token));
                     self.next();
                     None
@@ -255,6 +286,7 @@ impl AstBuilder {
                     self.next();
                     None
                 }
+
                 Fn => self.parse_function(),
                 True => Some(Node::BoolLiteral(true)),
                 False => Some(Node::BoolLiteral(false)),
@@ -290,7 +322,19 @@ pub enum Node {
 
     FnDeclare(FunctionDefAst),
     Return(Option<Box<Node>>),
+
+    Math {
+        left: Box<Node>,
+        op: MathSign,
+        right: Box<Node>,
+    },
 }
+#[derive(Debug, Clone)]
+pub enum MathSign {
+    Plus,
+    Minus,
+}
+
 #[derive(Debug, Clone)]
 pub struct ClassAst {
     _name: String,

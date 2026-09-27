@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use crate::ast::Node;
 use crate::ast::Node::*;
+use crate::ast::{MathSign, Node};
 use crate::functions::{Function, NativeFunction, NativeFunctionHeader, NonNativeFunction};
 use crate::xion_std;
 
@@ -127,6 +127,20 @@ impl Runtime {
 
                 None
             }
+            Math { left, op, right } => {
+                let left = self.eval(*left, errors);
+                let right = self.eval(*right, errors);
+                if let Some(left) = left
+                    && let Some(right) = right
+                {
+                    Some(match op {
+                        MathSign::Plus => left.add(&right).ok()?,
+                        MathSign::Minus=>unimplemented!("minus")
+                    })
+                } else {
+                    None
+                }
+            }
         }
     }
 
@@ -153,6 +167,38 @@ pub enum Value {
     Number(i64),
     Bool(bool),
 }
+impl Value {
+    fn add(&self, other: &Value) -> Result<Value, MathError> {
+        let restult = match self {
+            Value::Bool(_) => return Err(MathError::InvalidTypeLeft),
+            Value::Number(left) => match other {
+                Value::Bool(_) => return Err(MathError::InvalidTypeRight),
+                Value::Number(right) => Value::Number(*left + *right),
+                Value::String(right) => Value::String(left.to_string() + right),
+            },
+            Value::String(left) => match other {
+                Value::Bool(_) => return Err(MathError::InvalidTypeRight),
+                Value::Number(right) => Value::String(left.to_owned() + &(right.to_string())),
+                Value::String(right) => Value::String(left.to_owned() + right),
+            },
+        };
+        Ok(restult)
+    }
+    // fn sub(&self,other: &Value)->Result<Value,MathError>{
+
+
+
+
+
+
+    // }
+}
+#[derive(Debug, Clone)]
+enum MathError {
+    InvalidTypeLeft,
+    InvalidTypeRight,
+}
+
 impl std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let string_value = match self {
@@ -291,12 +337,8 @@ impl ErrorLog {
 pub struct Variable {
     value: Value,
 }
-impl Variable{
-    pub fn new(value:Value)->Self{
+impl Variable {
+    pub fn new(value: Value) -> Self {
         Self { value }
     }
-
-
-
-
 }

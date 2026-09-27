@@ -130,6 +130,8 @@ pub enum Token {
     Class,
     True,
     False,
+    Plus,
+    // Minus,
 }
 
 impl Token {
@@ -163,6 +165,7 @@ impl Token {
             '=' => Equals,
             '(' => LeftParen,
             ')' => RightParen,
+            '+' =>Plus,
             whitespace if is_whitespace(whitespace) => WhiteSpace,
             _ => return None,
         };
@@ -170,6 +173,9 @@ impl Token {
     }
     pub fn is_name(&self) -> bool {
         matches!(self, Name(_))
+    }
+    pub fn is_math_sign(&self)->bool{
+        matches!(self,Plus)
     }
 }
 pub const KEY_WORD_LET: &str = "let";

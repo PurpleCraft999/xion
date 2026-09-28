@@ -1,4 +1,9 @@
-let x = 20*2+1;
+#let x = 20*2+1;
 
 
-print(x);
+func y(){
+    return "y";
+}
+
+let z = y()+"x";
+print(z);

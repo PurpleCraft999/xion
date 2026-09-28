@@ -1,6 +1,6 @@
 use std::{iter::Peekable, str::Chars};
 
-use log::{error, warn};
+use log::{warn};
 
 use crate::token::Token::*;
 
@@ -44,7 +44,7 @@ impl<'a> Lexer<'a> {
             next.push(c);
         }
         if self.file.peek().is_none() {
-            error!("cannot find char {s}");
+            warn!("cannot find char {s:?}");
         }
 
         next

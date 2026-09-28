@@ -5,6 +5,8 @@ classes
 add properties to types and methods
 
 modules
+When added modules make sure to update runtime class creation code 
+
 consider merging two arrays with +
 if statements
 while loops

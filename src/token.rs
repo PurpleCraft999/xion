@@ -92,6 +92,10 @@ impl<'a> Lexer<'a> {
 const fn is_whitespace(c: char) -> bool {
     c == ' ' || c == '\n' || c == '\t'
 }
+fn is_name(name: &str) -> bool {
+    !name.starts_with(|c: char| c.is_numeric())
+        && name.chars().all(|c| c.is_alphanumeric() || c == '_')
+}
 
 #[derive(Debug, PartialEq)]
 pub enum Token {
@@ -131,11 +135,7 @@ impl Token {
             "true" => True,
             "false" => False,
             number if let Ok(num) = number.parse::<i64>() => NumberLiteral(num),
-            name if !s.starts_with(|c: char| c.is_numeric())
-                && s.chars().all(|c| c.is_alphanumeric() || c == '_') =>
-            {
-                Name(name.to_string())
-            }
+            name if is_name(name) => Name(name.to_string()),
 
             _ => return None,
         };

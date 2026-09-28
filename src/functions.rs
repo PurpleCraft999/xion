@@ -46,9 +46,10 @@ impl NonNativeFunction {
     fn call(&self, args: Vec<Value>, scope: Scope) -> Option<Value> {
         let mut runtime = Runtime::with_scope_and_nodes(self.body.clone(), scope);
         for (name, value) in self.params.iter().zip(args) {
+            let name =name.to_owned();
             runtime
                 .get_current_scope_mut()
-                .add_var(name.to_owned(), Variable::new(value))
+                .add_var(name,Variable::new(value))
                 .expect("this is safe because these are the first vars made");
         }
         runtime.run()

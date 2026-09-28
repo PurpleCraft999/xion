@@ -27,18 +27,7 @@ impl AstBuilder {
     fn consume_if(&mut self, c: impl FnOnce(&Token) -> bool) -> bool {
         self.tokens.next_if(c).is_some()
     }
-    ///consums upto and including token
-    fn consume_until(&mut self, t: Token) {
-        let mut tokens = Vec::new();
 
-        for token in self.tokens.by_ref() {
-            if t == token {
-                break;
-            }
-
-            tokens.push(token);
-        }
-    }
     fn next_if_name(&mut self) -> Option<String> {
         self.tokens.next_if_map(|t| match t {
             Token::Name(s) => Ok(s),
@@ -46,23 +35,21 @@ impl AstBuilder {
         })
     }
     fn parse_class(&mut self) -> Option<Node> {
+        self.consume_if(|t|t==&Class);
         let Some(class_name) = self.next_if_name() else {
             error!("token sould be name");
             return None;
         };
         if !self.consume_if(|t| matches!(t, LeftBrace)) {
-            error!("next non whitespace token was not left brace")
+            error!("next token was not left brace")
         }
-        //class fields
-        // while let Some(token) = self.next() && token!=RightBrace{
-        //     if token==WhiteSpace{
-        //         continue;
-        //     }
 
-        // }
+        let fields = self.parse_list(LeftBrace, RightBrace)?;
 
-        self.consume_until(RightBrace);
-        Some(Node::Class(ClassAst { _name: class_name }))
+
+
+
+        Some(Node::Class(ClassAst { name: class_name,fields }))
     }
     fn parse_var(&mut self) -> Option<Node> {
         self.consume_if(|t| t == &Let);
@@ -133,47 +120,36 @@ impl AstBuilder {
             }
         }
     }
-
-    fn parse_args(&mut self) -> Vec<Node> {
+    fn parse_list(&mut self,start:Token,end:Token)->Option<Vec<Node>>{
         let mut args = Vec::new();
-        self.consume_if(|t| t == &LeftParen);
+        self.consume_if(|t| t == &start);
         while let Some(token) = self.next() {
-            if token == RightParen {
+            if token == end {
                 break;
             }
 
             if let Some(expr) = self.parse_expr(token) {
                 args.push(expr);
             } else {
-                error!("parsing args error");
+                error!("list parse error");
+                return None;
             }
             if self.consume_if(|t| t == &Comma) {
                 continue;
             }
         }
 
-        args
+        Some(args)
+
+
+
+    }
+
+    fn parse_args(&mut self) -> Option<Vec<Node>> {
+        self.parse_list(LeftParen, RightParen)
     }
     fn parse_array(&mut self) -> Option<Node> {
-        self.consume_if(|t| t == &LeftBracket);
-
-        let mut vec = Vec::new();
-
-        while let Some(token) = self.next() {
-            if token == RightBracket {
-                break;
-            }
-            if let Some(expr) = self.parse_expr(token) {
-                vec.push(expr);
-            } else {
-                error!("parsing array literal value error");
-            }
-            if self.consume_if(|t| t == &Comma) {
-                continue;
-            }
-        }
-
-        Some(Node::ArrayLiteral(vec))
+        Some(Node::ArrayLiteral(self.parse_list(LeftBracket, RightBracket)?))
     }
 
     fn parse_function(&mut self) -> Option<Node> {
@@ -226,7 +202,7 @@ impl AstBuilder {
     }
     fn parse_name(&mut self, name: String) -> Option<Node> {
         if self.peek() == Some(&LeftParen) {
-            let args = self.parse_args();
+            let args = self.parse_args()?;
 
             if !self.consume_if(|t| t == &SemiColon) {
                 error!("No semicolon after function call");
@@ -396,7 +372,8 @@ pub enum MathSign {
 
 #[derive(Debug, Clone)]
 pub struct ClassAst {
-    _name: String,
+    pub name: String,
+    pub fields:Vec<Node>,
 }
 
 #[derive(Debug, Clone)]

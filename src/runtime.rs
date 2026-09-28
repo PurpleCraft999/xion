@@ -10,7 +10,7 @@ use crate::xion_std;
 #[derive(Debug, Clone)]
 pub struct Runtime {
     nodes: Vec<Node>,
-    scope: Scope,
+    current_scope: Scope,
     return_value: Option<Value>,
 }
 impl Runtime {
@@ -20,26 +20,26 @@ impl Runtime {
 
         Self::with_scope_and_nodes(nodes, scope)
     }
-    pub fn with_scope_and_nodes(nodes: Vec<Node>, scope: Scope) -> Self {
+    pub fn with_scope_and_nodes(nodes: Vec<Node>, current_scope: Scope) -> Self {
         Self {
             nodes,
-            scope,
+            current_scope,
             return_value: None,
         }
     }
 
     pub fn get_current_scope_mut(&mut self) -> &mut Scope {
-        &mut self.scope
+        &mut self.current_scope
     }
     pub fn get_current_scope(&self) -> &Scope {
-        &self.scope
+        &self.current_scope
     }
 
     fn eval(&mut self, node: Node) -> Option<Value> {
         match node {
             Var(var_ast) => {
                 if let Some(value) = self.eval(var_ast.value) {
-                    let var = Variable { value };
+                    let var = Variable::new(value);
                     if self
                         .get_current_scope_mut()
                         .add_var(var_ast.name.clone(), var)
@@ -56,17 +56,28 @@ impl Runtime {
             StringLiteral(str) => Some(Value::String(str)),
             VarRef(var) => self.get_current_scope().get_var_value(&var).cloned(),
             VarReasign { name, new_value } => {
-                let var = Variable {
-                    value: self.eval(*new_value)?,
-                };
-                if self.get_current_scope_mut().update_var(&name, var).is_err() {
+                let var = Variable::new(self.eval(*new_value)?);
+                
+                if self.get_current_scope_mut().update_var(&name,var).is_err() {
                     error!("cannot reassign var {name} because it does not exist");
                 }
                 None
             }
             NumberLiteral(num) => Some(Value::Number(num)),
-            Class(_class) => {
-                error!("classes not implemented");
+            Class(class) => {
+
+                //TODO: In the future this scope should be only globals,consts, and the like and not completly empty
+                let mut runtime = Runtime::with_scope_and_nodes(Vec::new(), Scope::new());
+                runtime.run();
+
+
+                let runtime_class = Class{name:class.name.clone(),fields:runtime.current_scope.vars};
+                if self.get_current_scope_mut().add_class(runtime_class).is_err(){
+                    error!("class {} already exists in this scope",class.name)
+
+
+
+                }
                 None
             }
             FnDeclare(func) => {
@@ -130,18 +141,18 @@ impl Runtime {
             )),
         }
     }
-
+    ///makes a child scope
     fn scope(&self) -> Scope {
         Scope::with_parent(self.get_current_scope().clone())
     }
 
-    pub fn run(mut self) -> Option<Value> {
+    pub fn run(&mut self) -> Option<Value> {
         let nodes = std::mem::take(&mut self.nodes);
         for node in nodes {
             self.eval(node);
         }
         debug!("{self:?}");
-        self.return_value
+        self.return_value.take()
     }
 }
 #[derive(Debug, Clone)]
@@ -237,6 +248,7 @@ pub struct Scope {
     parent_scope: Option<Box<Scope>>,
     vars: HashMap<String, Variable>,
     functions: HashMap<String, Function>,
+    classes:HashMap<String,Class>,
 }
 impl Scope {
     fn new() -> Self {
@@ -244,6 +256,7 @@ impl Scope {
             parent_scope: None,
             vars: HashMap::new(),
             functions: HashMap::new(),
+            classes:HashMap::new(),
         }
     }
     fn attach_std_lib(&mut self) {
@@ -260,6 +273,7 @@ impl Scope {
             parent_scope: Some(Box::new(scope)),
             vars: HashMap::new(),
             functions: HashMap::new(),
+            classes:HashMap::new(),
         }
     }
 
@@ -310,6 +324,16 @@ impl Scope {
             None => None,
         })
     }
+    pub fn add_class(&mut self,class:Class)->Result<(),AlreadyExists>{
+        
+        if self.classes.contains_key(&class.name) {
+            return Err(AlreadyExists);
+        }
+
+        self.classes.insert(class.name.clone(), class);
+        Ok(())
+
+    }
 }
 
 #[derive(Debug)]
@@ -326,3 +350,22 @@ impl Variable {
         Self { value }
     }
 }
+
+
+#[derive(Debug,Clone)]
+pub struct Class{
+    name:String,
+    fields:HashMap<String,Variable>,
+
+}
+impl Class{
+
+
+
+
+
+
+}
+
+
+

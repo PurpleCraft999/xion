@@ -37,7 +37,7 @@ impl Runtime {
 
     fn eval(&mut self, node: Node) -> Option<Value> {
         match node {
-            Var(var_ast) => {
+            VarDeclare(var_ast) => {
                 if let Some(value) = self.eval(var_ast.value) {
                     let var = Variable::new(value);
                     if self
@@ -57,26 +57,28 @@ impl Runtime {
             VarRef(var) => self.get_current_scope().get_var_value(&var).cloned(),
             VarReasign { name, new_value } => {
                 let var = Variable::new(self.eval(*new_value)?);
-                
-                if self.get_current_scope_mut().update_var(&name,var).is_err() {
+
+                if self.get_current_scope_mut().update_var(&name, var).is_err() {
                     error!("cannot reassign var {name} because it does not exist");
                 }
                 None
             }
             NumberLiteral(num) => Some(Value::Number(num)),
-            Class(class) => {
-
+            ClassDeclare(class) => {
                 //TODO: In the future this scope should be only globals,consts, and the like and not completly empty
                 let mut runtime = Runtime::with_scope_and_nodes(Vec::new(), Scope::new());
                 runtime.run();
 
-
-                let runtime_class = Class{name:class.name.clone(),fields:runtime.current_scope.vars};
-                if self.get_current_scope_mut().add_class(runtime_class).is_err(){
-                    error!("class {} already exists in this scope",class.name)
-
-
-
+                let runtime_class = Class {
+                    name: class.name.clone(),
+                    fields: runtime.current_scope.vars,
+                };
+                if self
+                    .get_current_scope_mut()
+                    .add_class(runtime_class)
+                    .is_err()
+                {
+                    error!("class {} already exists in this scope", class.name)
                 }
                 None
             }
@@ -96,10 +98,15 @@ impl Runtime {
                 None
             }
             FnCall(func_ast) => {
-                let func = self
+                let Some(func) = self
                     .get_current_scope()
                     .get_function(&func_ast.name)
-                    .cloned()?;
+                    .cloned() else{ 
+                        error!("tried to call unknown function {}",func_ast.name);
+                        return None;
+
+
+                    };
 
                 let mut values = Vec::new();
                 for node in func_ast.args {
@@ -118,6 +125,9 @@ impl Runtime {
                     None
                 };
                 self.return_value = value;
+                //force execution to stop by removing all remaining nodes
+                self.nodes=Vec::new();
+
 
                 None
             }
@@ -248,7 +258,7 @@ pub struct Scope {
     parent_scope: Option<Box<Scope>>,
     vars: HashMap<String, Variable>,
     functions: HashMap<String, Function>,
-    classes:HashMap<String,Class>,
+    classes: HashMap<String, Class>,
 }
 impl Scope {
     fn new() -> Self {
@@ -256,7 +266,7 @@ impl Scope {
             parent_scope: None,
             vars: HashMap::new(),
             functions: HashMap::new(),
-            classes:HashMap::new(),
+            classes: HashMap::new(),
         }
     }
     fn attach_std_lib(&mut self) {
@@ -273,7 +283,7 @@ impl Scope {
             parent_scope: Some(Box::new(scope)),
             vars: HashMap::new(),
             functions: HashMap::new(),
-            classes:HashMap::new(),
+            classes: HashMap::new(),
         }
     }
 
@@ -324,15 +334,13 @@ impl Scope {
             None => None,
         })
     }
-    pub fn add_class(&mut self,class:Class)->Result<(),AlreadyExists>{
-        
+    pub fn add_class(&mut self, class: Class) -> Result<(), AlreadyExists> {
         if self.classes.contains_key(&class.name) {
             return Err(AlreadyExists);
         }
 
         self.classes.insert(class.name.clone(), class);
         Ok(())
-
     }
 }
 
@@ -351,21 +359,9 @@ impl Variable {
     }
 }
 
-
-#[derive(Debug,Clone)]
-pub struct Class{
-    name:String,
-    fields:HashMap<String,Variable>,
-
+#[derive(Debug, Clone)]
+pub struct Class {
+    name: String,
+    fields: HashMap<String, Variable>,
 }
-impl Class{
-
-
-
-
-
-
-}
-
-
-
+impl Class {}

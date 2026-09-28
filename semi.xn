@@ -3,3 +3,9 @@
 #let a = true;
 print("hello world!");
 let x = 4;
+
+print(eo());
+fn eo(){
+    return 4;
+    return 5;
+}

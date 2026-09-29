@@ -140,7 +140,7 @@ impl Runtime {
                         MathSign::Plus => left.add(&right),
                         MathSign::Minus => left.sub(&right),
                         MathSign::Multiply => left.mul(&right),
-                        MathSign::Division=>left.div(&right),
+                        MathSign::Division => left.div(&right),
                     };
                     if let Ok(value) = result {
                         Some(value)
@@ -233,30 +233,28 @@ impl Value {
             },
         }
     }
-    fn div(&self,other: &Value)->Result<Value,MathError>{
-        match (self,other){
-            (Value::Number(left),Value::Number(right))=>{
-                if *right==0{
+    fn div(&self, other: &Value) -> Result<Value, MathError> {
+        match (self, other) {
+            (Value::Number(left), Value::Number(right)) => {
+                if *right == 0 {
                     Err(MathError::DivisionByZero)
-                } else{
-                    Ok(Value::Number(left/right))
+                } else {
+                    Ok(Value::Number(left / right))
                 }
-
-
-            },
-            (Value::Number(_),_)=>Err(InvalidTypeRight),
-            (_,Value::Number(_))=>Err(InvalidTypeLeft),
-            _=>unreachable!("number ocupies both slots in previous brances therefore this cannot be reached"),
+            }
+            (Value::Number(_), _) => Err(InvalidTypeRight),
+            (_, Value::Number(_)) => Err(InvalidTypeLeft),
+            _ => unreachable!(
+                "number ocupies both slots in previous brances therefore this cannot be reached"
+            ),
         }
     }
 }
 
 fn vec_to_string<T: ToString>(vec: &Vec<T>) -> String {
-    if vec.len()==0{
+    if vec.is_empty(){
         return String::from("[]");
     }
-
-
 
     let mut vec_str = String::from('[');
     for item in vec {
@@ -411,3 +409,9 @@ pub struct Class {
     fields: HashMap<String, Variable>,
 }
 impl Class {}
+
+
+
+#[cfg(test)]
+#[path = "tests/runtime.rs"]
+mod runtime;

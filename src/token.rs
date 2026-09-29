@@ -131,7 +131,7 @@ impl Token {
         let token = match s {
             KEY_WORD_LET => Let,
             KEY_WORD_CLASS => Class,
-            "fn" | "func" => Fn,
+            "fn" => Fn,
             "return" => Return,
             "true" => True,
             "false" => False,
@@ -158,7 +158,7 @@ impl Token {
             '+' => Plus,
             '-' => Minus,
             '*' => Asterisk,
-            '/'=>Division,
+            '/' => Division,
             whitespace if is_whitespace(whitespace) => WhiteSpace,
             _ => return None,
         };
@@ -173,3 +173,7 @@ impl Token {
 }
 pub const KEY_WORD_LET: &str = "let";
 pub const KEY_WORD_CLASS: &str = "class";
+
+#[cfg(test)]
+#[path = "tests/lexer.rs"]
+mod lexer;

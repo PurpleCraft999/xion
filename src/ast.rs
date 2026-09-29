@@ -72,17 +72,6 @@ impl AstBuilder {
         Option<&'expr Token>: From<&'expr E>,
     {
         let node = match token {
-            // StringLiteral(name) => {
-            //     //strings only support addition
-            //     if self.peek() == Some(&Plus) {
-            //         self.tree.push(Node::StringLiteral(name));
-            //         let n = self.next().expect("we just peeked ahead and saw a value");
-            //         self.parse_expr(n, end_token)
-            //     } else {
-            //         Some(Node::StringLiteral(name))
-            //     }
-            // }
-            // Name(name) => self.parse_name(name),
             NumberLiteral(_) | Name(_) | StringLiteral(_) | LeftParen => {
                 pratt_parser::parse_expression(self, 0, token, end_token.into())
             }
@@ -110,8 +99,8 @@ impl AstBuilder {
             True => Some(Node::BoolLiteral(true)),
             False => Some(Node::BoolLiteral(false)),
             Fn | LeftBrace | RightBrace | RightParen | SemiColon | Comma | Colon | WhiteSpace
-            | Equals | EOF | Class | Plus | Asterisk | RightBracket |Division => {
-                error!("unexpected expresion while parsing expresion: {:?}", token);
+            | Equals | EOF | Class | Plus | Asterisk | RightBracket | Division => {
+                error!("unexpected token while parsing expresion: {:?}", token);
                 None
             }
         };
@@ -143,9 +132,7 @@ impl AstBuilder {
             debug!("token = {token:?}, end token = {end:?}");
             if token == end {
                 break;
-
             }
-
 
             if let Some(expr) = self.parse_expr(token, &None) {
                 args.push(expr);
@@ -229,7 +216,7 @@ impl AstBuilder {
             let new_value = self.next()?;
             Some(Node::VarReasign {
                 name,
-                new_value: Box::new(self.parse_expr(new_value, &SemiColon)?),
+                new_value: Box::new(self.parse_expr(new_value, &None)?),
             })
         } else {
             Some(Node::VarRef(name))
@@ -240,33 +227,37 @@ impl AstBuilder {
         while let Some(token) = self.peek() {
             let node = match token {
                 Class => self.parse_class(),
-                Name(_) => {
-                    let token = self.next().expect("peeking has shown we have a next token moreover we are in a match arm of said token");
-                    self.parse_expr(token, &SemiColon)
-                    // let name = self
-                    //     .next_if_name()
-                    //     .expect("we are matching the name branch of the node");
-                    // self.parse_name(name)
-                }
+                // Name(_) => {
+                //     let token = self.next().expect("peeking has shown we have a next token moreover we are in a match arm of said token");
+                //     self.parse_expr(token, &SemiColon)
+                //     // let name = self
+                //     //     .next_if_name()
+                //     //     .expect("we are matching the name branch of the node");
+                //     // self.parse_name(name)
+                // }
                 //never meant to be read here
                 //whitespace cant be in at this point
-                WhiteSpace | Colon | SemiColon | Comma | LeftBrace | RightBrace | Equals
-                | LeftParen | RightParen | Return | Plus | Minus | Asterisk |Division| LeftBracket
-                | RightBracket | True | False => {
-                    warn!("unexpected lang syntax {:?}", token);
-                    self.next();
-                    None
-                }
+                // WhiteSpace | Colon | SemiColon | Comma | LeftBrace | RightBrace | Equals
+                // | LeftParen | RightParen | Return | Plus | Minus | Asterisk | Division
+                // | LeftBracket | RightBracket | True | False => {
+                //     warn!("unexpected lang syntax {:?}", token);
+                //     self.next();
+                //     None
+                // }
                 Let => self.parse_var(),
-                StringLiteral(_) | NumberLiteral(_) => {
-                    error!("literal in main ast branch");
-                    self.next();
-                    None
-                }
-
+                // StringLiteral(_) | NumberLiteral(_) => {
+                //     error!("literal in main ast branch");
+                //     self.next();
+                //     None
+                // }
                 Fn => self.parse_function(),
 
                 EOF => break,
+
+                _ => {
+                    let next = self.next().expect("we already peeked");
+                    self.parse_expr(next, &SemiColon)
+                }
             };
             if let Some(node) = node {
                 self.tree.push(node);
@@ -281,6 +272,7 @@ impl AstBuilder {
 }
 
 #[derive(Debug, Clone)]
+#[cfg_attr(test, derive(PartialEq))]
 pub enum Node {
     ClassDeclare(ClassAst),
     VarDeclare(Box<VarAst>),
@@ -306,6 +298,7 @@ pub enum Node {
     },
 }
 #[derive(Debug, Clone)]
+#[cfg_attr(test, derive(PartialEq))]
 pub enum MathSign {
     Plus,
     Minus,
@@ -314,23 +307,27 @@ pub enum MathSign {
 }
 
 #[derive(Debug, Clone)]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct ClassAst {
     pub name: String,
     pub fields: Vec<Node>,
 }
 
 #[derive(Debug, Clone)]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct VarAst {
     pub name: String,
     pub value: Node,
 }
 #[derive(Debug, Clone)]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct FnCallAst {
     pub name: String,
     pub args: Vec<Node>,
 }
 
 #[derive(Debug, Clone)]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct FunctionDefAst {
     pub name: String,
     pub paramaters: Vec<String>,
@@ -349,7 +346,7 @@ mod pratt_parser {
         match op {
             // '=' => (0.2, 0.1),
             MathSign::Plus | MathSign::Minus => (1, 2),
-            MathSign::Multiply|MathSign::Division => (3, 4),
+            MathSign::Multiply | MathSign::Division => (3, 4),
             // '^' | '√' => (3.1, 3.0),
             // '.' => (4.0, 4.1),
         }
@@ -394,11 +391,14 @@ mod pratt_parser {
             }
 
             let op = match peek {
-                Some(Token::RightParen) | None |Some(Token::RightBracket)|Some(Token::SemiColon) => break,
+                Some(Token::RightParen)
+                | None
+                | Some(Token::RightBracket)
+                | Some(Token::SemiColon) => break,
                 Some(Token::Plus) => MathSign::Plus,
                 Some(Token::Minus) => MathSign::Minus,
                 Some(Token::Asterisk) => MathSign::Multiply,
-                Some(Token::Division)=>MathSign::Division,
+                Some(Token::Division) => MathSign::Division,
                 // end if end == end_token =>{
                 //     debug!("hit end token ");
                 //     break;
@@ -425,3 +425,6 @@ mod pratt_parser {
         Some(lhs)
     }
 }
+#[cfg(test)]
+#[path = "tests/ast.rs"]
+mod ast;

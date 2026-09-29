@@ -1,6 +1,6 @@
 use std::{iter::Peekable, str::Chars};
 
-use log::{warn};
+use log::warn;
 
 use crate::token::Token::*;
 
@@ -165,11 +165,8 @@ impl Token {
     pub fn is_name(&self) -> bool {
         matches!(self, Name(_))
     }
-    pub fn is_addition_or_subtraction(&self) -> bool {
-        matches!(self, Plus | Minus)
-    }
-    pub fn is_multiplication_or_division(&self) -> bool {
-        matches!(self, Asterisk)
+    pub fn is_math_sign(&self) -> bool {
+        matches!(self, Plus | Minus | Asterisk)
     }
 }
 pub const KEY_WORD_LET: &str = "let";

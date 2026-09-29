@@ -82,8 +82,10 @@ impl AstBuilder {
                     Some(Node::StringLiteral(name))
                 }
             }
-            Name(name) => self.parse_name(name),
-            NumberLiteral(number) => Some(Node::NumberLiteral(number)),
+            // Name(name) => self.parse_name(name),
+            NumberLiteral(_) | Name(_) | LeftParen => {
+                pratt_parser::parse_expression(self, 0, token, end_token.into())
+            }
             Return => {
                 let token = self.next();
                 let return_value = if let Some(value) = token {
@@ -107,8 +109,8 @@ impl AstBuilder {
             Let => self.parse_var(),
             True => Some(Node::BoolLiteral(true)),
             False => Some(Node::BoolLiteral(false)),
-            Fn | LeftBrace | RightBrace | LeftParen | RightParen | SemiColon | Comma | Colon
-            | WhiteSpace | Equals | EOF | Class | Plus | Asterisk | RightBracket => {
+            Fn | LeftBrace | RightBrace | RightParen | SemiColon | Comma | Colon | WhiteSpace
+            | Equals | EOF | Class | Plus | Asterisk | RightBracket => {
                 error!("unexpected expresion while parsing expresion: {:?}", token);
                 None
             }
@@ -122,7 +124,11 @@ impl AstBuilder {
         } else if end_token.is_none() {
             node
         } else {
-            let end = if let Some(end) =end_token{format!("{end:?}").to_lowercase() } else{"No end was specified".to_string()};
+            let end = if let Some(end) = end_token {
+                format!("{end:?}").to_lowercase()
+            } else {
+                "No end was specified".to_string()
+            };
             error!("no {end} after expresion {node:?}");
             None
         }
@@ -241,10 +247,12 @@ impl AstBuilder {
             let node = match token {
                 Class => self.parse_class(),
                 Name(_) => {
-                    let name = self
-                        .next_if_name()
-                        .expect("we are matching the name branch of the node");
-                    self.parse_name(name)
+                    let token = self.next().expect("peeking has shown we have a next token moreover we are in a match arm of said token");
+                    self.parse_expr(token, &SemiColon)
+                    // let name = self
+                    //     .next_if_name()
+                    //     .expect("we are matching the name branch of the node");
+                    // self.parse_name(name)
                 }
                 //never meant to be read here
                 //whitespace cant be in at this point
@@ -277,7 +285,6 @@ impl AstBuilder {
         self.tree
     }
 }
-
 
 #[derive(Debug, Clone)]
 pub enum Node {
@@ -333,4 +340,96 @@ pub struct FunctionDefAst {
     pub name: String,
     pub paramaters: Vec<String>,
     pub body: Vec<Node>,
+}
+
+mod pratt_parser {
+    use log::{debug, error};
+
+    use crate::{
+        ast::{AstBuilder, MathSign},
+        token::Token::{self},
+    };
+
+    fn infix_binding_power(op: &MathSign) -> (u8, u8) {
+        match op {
+            // '=' => (0.2, 0.1),
+            MathSign::Plus | MathSign::Minus => (1, 2),
+            MathSign::Multiply => (3, 4),
+            // '^' | '√' => (3.1, 3.0),
+            // '.' => (4.0, 4.1),
+        }
+    }
+
+    pub fn parse_expression(
+        lexer: &mut AstBuilder,
+        min_bp: u8,
+        start: Token,
+        end_token: Option<&Token>,
+    ) -> Option<super::Node> {
+        let mut lhs = match start {
+            Token::Name(it) => lexer.parse_name(it)?,
+            Token::LeftParen => {
+                let next = lexer.next()?;
+                let lhs = parse_expression(lexer, 0, next, end_token);
+                if !lexer.consume_if(|t| t == &Token::RightParen) {
+                    error!("no closing paran");
+                }
+                lhs?
+            }
+            Token::RightParen => {
+                error!("start was a )");
+
+                return None;
+            }
+            Token::NumberLiteral(num) => super::Node::NumberLiteral(num),
+            // Token::Op('(') => {
+            //     let lhs = parse_expression(lexer, 0.0);
+            //     assert_eq!(lexer.next(), Token::Op(')'));
+            //     lhs
+            // }
+            t => {
+                error!("bad token: {:?}", t);
+                return None;
+            }
+        };
+        loop {
+            let peek = lexer.peek();
+            if let Some(et) = end_token
+                && peek == Some(et)
+            {
+                debug!("hit end token");
+                // lexer.next();
+                break;
+            }
+
+            let op = match peek {
+                Some(Token::RightParen) | None => break,
+                Some(Token::Plus) => MathSign::Plus,
+                Some(Token::Minus) => MathSign::Minus,
+                Some(Token::Asterisk) => MathSign::Multiply,
+                // end if end == end_token =>{
+                //     debug!("hit end token ");
+                //     break;
+                // },
+                Some(t) => {
+                    error!("bad op: {:?}", t);
+                    return None;
+                }
+            };
+            let (l_bp, r_bp) = infix_binding_power(&op);
+            if l_bp < min_bp {
+                break;
+            }
+
+            lexer.next();
+            let next = lexer.next()?;
+            let rhs = parse_expression(lexer, r_bp, next, end_token)?;
+            lhs = super::Node::Math {
+                left: Box::new(lhs),
+                op: op,
+                right: Box::new(rhs),
+            };
+        }
+        Some(lhs)
+    }
 }

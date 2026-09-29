@@ -101,12 +101,11 @@ impl Runtime {
                 let Some(func) = self
                     .get_current_scope()
                     .get_function(&func_ast.name)
-                    .cloned() else{ 
-                        error!("tried to call unknown function {}",func_ast.name);
-                        return None;
-
-
-                    };
+                    .cloned()
+                else {
+                    error!("tried to call unknown function {}", func_ast.name);
+                    return None;
+                };
 
                 let mut values = Vec::new();
                 for node in func_ast.args {
@@ -126,8 +125,7 @@ impl Runtime {
                 };
                 self.return_value = value;
                 //force execution to stop by removing all remaining nodes
-                self.nodes=Vec::new();
-
+                self.nodes = Vec::new();
 
                 None
             }

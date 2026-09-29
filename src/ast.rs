@@ -110,7 +110,7 @@ impl AstBuilder {
             True => Some(Node::BoolLiteral(true)),
             False => Some(Node::BoolLiteral(false)),
             Fn | LeftBrace | RightBrace | RightParen | SemiColon | Comma | Colon | WhiteSpace
-            | Equals | EOF | Class | Plus | Asterisk | RightBracket => {
+            | Equals | EOF | Class | Plus | Asterisk | RightBracket |Division => {
                 error!("unexpected expresion while parsing expresion: {:?}", token);
                 None
             }
@@ -257,7 +257,7 @@ impl AstBuilder {
                 //never meant to be read here
                 //whitespace cant be in at this point
                 WhiteSpace | Colon | SemiColon | Comma | LeftBrace | RightBrace | Equals
-                | LeftParen | RightParen | Return | Plus | Minus | Asterisk | LeftBracket
+                | LeftParen | RightParen | Return | Plus | Minus | Asterisk |Division| LeftBracket
                 | RightBracket | True | False => {
                     warn!("unexpected lang syntax {:?}", token);
                     self.next();
@@ -316,6 +316,7 @@ pub enum MathSign {
     Plus,
     Minus,
     Multiply,
+    Division,
 }
 
 #[derive(Debug, Clone)]
@@ -354,7 +355,7 @@ mod pratt_parser {
         match op {
             // '=' => (0.2, 0.1),
             MathSign::Plus | MathSign::Minus => (1, 2),
-            MathSign::Multiply => (3, 4),
+            MathSign::Multiply|MathSign::Division => (3, 4),
             // '^' | '√' => (3.1, 3.0),
             // '.' => (4.0, 4.1),
         }
@@ -403,6 +404,7 @@ mod pratt_parser {
                 Some(Token::Plus) => MathSign::Plus,
                 Some(Token::Minus) => MathSign::Minus,
                 Some(Token::Asterisk) => MathSign::Multiply,
+                Some(Token::Division)=>MathSign::Division,
                 // end if end == end_token =>{
                 //     debug!("hit end token ");
                 //     break;

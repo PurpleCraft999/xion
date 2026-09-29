@@ -5,7 +5,7 @@ use log::{debug, error};
 use crate::ast::Node::*;
 use crate::ast::{MathSign, Node};
 use crate::functions::{Function, NativeFunction, NativeFunctionHeader, NonNativeFunction};
-use crate::runtime::MathError::InvalidTypeRight;
+use crate::runtime::MathError::{InvalidTypeLeft, InvalidTypeRight};
 use crate::xion_std;
 
 #[derive(Debug, Clone)]
@@ -140,6 +140,7 @@ impl Runtime {
                         MathSign::Plus => left.add(&right),
                         MathSign::Minus => left.sub(&right),
                         MathSign::Multiply => left.mul(&right),
+                        MathSign::Division=>left.div(&right),
                     };
                     if let Ok(value) = result {
                         Some(value)
@@ -232,6 +233,22 @@ impl Value {
             },
         }
     }
+    fn div(&self,other: &Value)->Result<Value,MathError>{
+        match (self,other){
+            (Value::Number(left),Value::Number(right))=>{
+                if *right==0{
+                    Err(MathError::DivisionByZero)
+                } else{
+                    Ok(Value::Number(left/right))
+                }
+
+
+            },
+            (Value::Number(_),_)=>Err(InvalidTypeRight),
+            (_,Value::Number(_))=>Err(InvalidTypeLeft),
+            _=>unreachable!("number ocupies both slots in previous brances therefore this cannot be reached"),
+        }
+    }
 }
 
 fn vec_to_string<T: ToString>(vec: &Vec<T>) -> String {
@@ -273,6 +290,7 @@ enum MathError {
     InvalidTypeLeft,
     InvalidTypeRight,
     UnexpectedNegativeInt,
+    DivisionByZero,
 }
 
 #[derive(Debug, Clone)]

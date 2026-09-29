@@ -29,6 +29,7 @@ impl NativeFunction {
     }
 }
 
+
 #[derive(Debug, Clone)]
 pub struct NonNativeFunction {
     name: String,

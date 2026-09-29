@@ -162,3 +162,11 @@ fn class_delcaration_with_variable() {
         ast
     );
 }
+//just an empty function call without value
+#[test]
+fn class_constructor_with_value(){
+    let ast = ast(vec![Name("Class"),LeftParen,Name("x"),Colon,Token::NumberLiteral(50),RightParen,SemiColon]);
+    assert_eq!(vec![FnCall(FnCallAst { name: "Class".to_string(), args: vec![VarReasign { name: "x".to_string(), new_value: Box::new(Node::NumberLiteral(50)) }] })],ast);
+
+
+}

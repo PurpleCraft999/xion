@@ -1,6 +1,9 @@
 class Name{
 
     let x = 40;
-
-
 }
+
+
+let name = Name(x:3);
+let name2 = Name();
+print(name);print(name2);

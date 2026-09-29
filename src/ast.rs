@@ -216,13 +216,23 @@ impl AstBuilder {
         // scope
     }
     fn parse_name(&mut self, name: String) -> Option<Node> {
-        if self.peek() == Some(&LeftParen) {
+        let peeked = self.peek();
+        if peeked == Some(&LeftParen) {
             let args = self.parse_args()?;
 
             Some(Node::FnCall(FnCallAst { name, args }))
-        } else if self.peek() == Some(&Equals) {
+        } else if peeked == Some(&Equals) {
             self.next();
             let new_value = self.next()?;
+            Some(Node::VarReasign {
+                name,
+                new_value: Box::new(self.parse_expr(new_value, &None)?),
+            })
+        } else if peeked == Some(&Colon) {
+            //this branch is for assigning instance vars
+            self.next();
+            let new_value = self.next()?;
+
             Some(Node::VarReasign {
                 name,
                 new_value: Box::new(self.parse_expr(new_value, &None)?),

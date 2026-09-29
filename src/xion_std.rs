@@ -1,5 +1,8 @@
 use crate::runtime::Value;
 
+type Input = Vec<Value>;
+type Output = Option<Value>;
+
 pub fn print(values: Vec<Value>) -> Option<Value> {
     if values.len() == 1 {
         println!("{}", values[0])
@@ -17,11 +20,15 @@ pub fn print(values: Vec<Value>) -> Option<Value> {
     None
 }
 
-pub fn input(_values: Vec<Value>) -> Option<Value> {
+pub fn input(_: Vec<Value>) -> Option<Value> {
     let mut out = String::new();
     match std::io::stdin().read_line(&mut out) {
         Ok(_) => (),
         Err(err) => println!("Error reading input steam {err}"),
     }
     Some(Value::String(out))
+}
+
+pub fn instantiate(_: Input) -> Output {
+    None
 }

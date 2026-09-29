@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use log::{debug, error};
 
@@ -67,7 +68,7 @@ impl Runtime {
             NumberLiteral(num) => Some(Value::Number(num)),
             ClassDeclare(class) => {
                 //TODO: In the future this scope should be only globals,consts, and the like and not completly empty
-                let mut runtime = Runtime::with_scope_and_nodes(Vec::new(), Scope::new());
+                let mut runtime = Runtime::with_scope_and_nodes(class.fields, Scope::new());
                 runtime.run();
 
                 let runtime_class = Class {
@@ -81,6 +82,8 @@ impl Runtime {
                 {
                     error!("class {} already exists in this scope", class.name)
                 }
+                self.get_current_scope_mut()
+                    .add_native_fn(&class.name, xion_std::instantiate);
                 None
             }
             FnDeclare(func) => {
@@ -108,14 +111,34 @@ impl Runtime {
                     return None;
                 };
 
-                let mut values = Vec::new();
+                match func {
+                    Function::Native(_) => {
+                        if let Some(class) = self.get_current_scope().get_class(&func_ast.name)
+                            
+                        {
+                            debug!("instantiating class {class:?}");
+                            let mut instance = class.instantiate();
+                            let mut scope = Scope::new();
+                            scope.vars = class.fields.clone();
+                            // should run any VarAssigns for the class
+                            let mut runtime = Runtime::with_scope_and_nodes(func_ast.args, scope);
+                            runtime.run();
+                            instance.fields = runtime.current_scope.vars;
+
+                            return Some(Value::Object(instance));
+                        }
+                    }
+                    Function::NonNative(_) => (),
+                }
+
+                let mut arguments = Vec::new();
                 for node in func_ast.args {
                     if let Some(node) = self.eval(node) {
-                        values.push(node)
+                        arguments.push(node)
                     }
                 }
 
-                func.call(values, self.scope())
+                func.call(arguments, self.scope())
             }
             BoolLiteral(b) => Some(Value::Bool(b)),
             Return(value) => {
@@ -179,18 +202,21 @@ pub enum Value {
     Number(i64),
     Bool(bool),
     Array(Vec<Value>),
+    Object(ClassInstance),
 }
 impl Value {
     fn add(&self, other: &Value) -> Result<Value, MathError> {
         match self {
             Value::Bool(left) => match other {
                 Value::String(right) => Ok(Value::String(left.to_string() + right)),
-                Value::Bool(_) | Value::Number(_) | Value::Array(_) => {
+                Value::Bool(_) | Value::Number(_) | Value::Array(_) | Value::Object(_) => {
                     Err(MathError::InvalidTypeRight)
                 }
             },
             Value::Number(left) => match other {
-                Value::Bool(_) | Value::Array(_) => Err(MathError::InvalidTypeRight),
+                Value::Bool(_) | Value::Array(_) | Value::Object(_) => {
+                    Err(MathError::InvalidTypeRight)
+                }
                 Value::Number(right) => Ok(Value::Number(*left + *right)),
                 Value::String(right) => Ok(Value::String(left.to_string() + right)),
             },
@@ -199,38 +225,46 @@ impl Value {
                 Value::Number(right) => Ok(Value::String(left.to_owned() + &(right.to_string()))),
                 Value::String(right) => Ok(Value::String(left.to_owned() + right)),
                 Value::Array(right) => Ok(Value::String(left.to_owned() + &vec_to_string(right))),
+                Value::Object(_) => unimplemented!(),
             },
             Value::Array(left) => match other {
-                Value::Bool(_) | Value::Number(_) | Value::Array(_) => {
+                Value::Bool(_) | Value::Number(_) | Value::Array(_) | Value::Object(_) => {
                     Err(MathError::InvalidTypeRight)
                 }
                 Value::String(right) => Ok(Value::String(vec_to_string(left) + right)),
             },
+            Value::Object(_) => unimplemented!(),
         }
     }
     fn sub(&self, other: &Value) -> Result<Value, MathError> {
         match self {
             Value::Bool(_) | Value::String(_) | Value::Array(_) => Err(MathError::InvalidTypeLeft),
             Value::Number(left) => match other {
-                Value::Bool(_) | Value::String(_) | Value::Array(_) => {
+                Value::Bool(_) | Value::String(_) | Value::Array(_) | Value::Object(_) => {
                     Err(MathError::InvalidTypeRight)
                 }
                 Value::Number(right) => Ok(Value::Number(*left - *right)),
             },
+            Value::Object(_) => unimplemented!(),
         }
     }
     fn mul(&self, other: &Value) -> Result<Value, MathError> {
         match self {
             Value::Bool(_) | Value::Array(_) => Err(MathError::InvalidTypeLeft),
             Value::Number(left) => match other {
-                Value::Bool(_) | Value::Array(_) => Err(MathError::InvalidTypeRight),
+                Value::Bool(_) | Value::Array(_) | Value::Object(_) => {
+                    Err(MathError::InvalidTypeRight)
+                }
                 Value::Number(right) => Ok(Value::Number(*left * *right)),
                 Value::String(right) => string_mult(right, *left).map(Value::String),
             },
             Value::String(left) => match other {
                 Value::Number(right) => string_mult(left, *right).map(Value::String),
-                Value::Array(_) | Value::Bool(_) | Value::String(_) => Err(InvalidTypeRight),
+                Value::Array(_) | Value::Bool(_) | Value::String(_) | Value::Object(_) => {
+                    Err(InvalidTypeRight)
+                }
             },
+            Value::Object(_) => unimplemented!(),
         }
     }
     fn div(&self, other: &Value) -> Result<Value, MathError> {
@@ -284,6 +318,8 @@ impl std::fmt::Display for Value {
             Self::Number(n) => n.to_string(),
             Self::String(s) => s.to_owned(),
             Self::Array(v) => vec_to_string(v),
+            //temp
+            Self::Object(o) => format!("{o:?}"),
         };
         write!(f, "{string_value}")
     }
@@ -302,7 +338,7 @@ pub struct Scope {
     parent_scope: Option<Box<Scope>>,
     vars: HashMap<String, Variable>,
     functions: HashMap<String, Function>,
-    classes: HashMap<String, Class>,
+    classes: HashMap<String, Rc<Class>>,
 }
 impl Scope {
     fn new() -> Self {
@@ -383,8 +419,17 @@ impl Scope {
             return Err(AlreadyExists);
         }
 
-        self.classes.insert(class.name.clone(), class);
+        self.classes.insert(class.name.clone(), Rc::new(class));
         Ok(())
+    }
+    pub fn get_class(&self, name: &str) -> Option<Rc<Class>> {
+        self.classes
+            .get(name)
+            .cloned()
+            .or(match &self.parent_scope {
+                Some(s) => s.get_class(name),
+                None => None,
+            })
     }
 }
 
@@ -408,7 +453,19 @@ pub struct Class {
     name: String,
     fields: HashMap<String, Variable>,
 }
-impl Class {}
+impl Class {
+    pub fn instantiate(self: &Rc<Self>) -> ClassInstance {
+        ClassInstance {
+            class: Rc::clone(self),
+            fields: self.fields.clone(),
+        }
+    }
+}
+#[derive(Debug, Clone)]
+pub struct ClassInstance {
+    class: Rc<Class>,
+    fields: HashMap<String, Variable>,
+}
 
 #[cfg(test)]
 #[path = "tests/runtime.rs"]

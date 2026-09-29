@@ -252,7 +252,7 @@ impl Value {
 }
 
 fn vec_to_string<T: ToString>(vec: &Vec<T>) -> String {
-    if vec.is_empty(){
+    if vec.is_empty() {
         return String::from("[]");
     }
 
@@ -409,8 +409,6 @@ pub struct Class {
     fields: HashMap<String, Variable>,
 }
 impl Class {}
-
-
 
 #[cfg(test)]
 #[path = "tests/runtime.rs"]

@@ -44,7 +44,7 @@ impl AstBuilder {
             error!("next token was not left brace")
         }
 
-        let fields = self.parse_list(LeftBrace, RightBrace)?;
+        let fields = self.parse_list(LeftBrace, RightBrace, SemiColon)?;
 
         Some(Node::ClassDeclare(ClassAst {
             name: class_name,
@@ -122,7 +122,7 @@ impl AstBuilder {
             None
         }
     }
-    fn parse_list(&mut self, start: Token, end: Token) -> Option<Vec<Node>> {
+    fn parse_list(&mut self, start: Token, end: Token, sep: Token) -> Option<Vec<Node>> {
         let mut args = Vec::new();
         if !self.consume_if(|t| t == &start) {
             warn!("List does not start with token: {start:?}");
@@ -140,7 +140,7 @@ impl AstBuilder {
                 error!("list parse error");
                 return None;
             }
-            if self.consume_if(|t| t == &Comma) {
+            if self.consume_if(|t| t == &sep) {
                 continue;
             }
         }
@@ -149,12 +149,14 @@ impl AstBuilder {
     }
 
     fn parse_args(&mut self) -> Option<Vec<Node>> {
-        self.parse_list(LeftParen, RightParen)
+        self.parse_list(LeftParen, RightParen, Comma)
     }
     fn parse_array(&mut self) -> Option<Node> {
-        Some(Node::ArrayLiteral(
-            self.parse_list(LeftBracket, RightBracket)?,
-        ))
+        Some(Node::ArrayLiteral(self.parse_list(
+            LeftBracket,
+            RightBracket,
+            Comma,
+        )?))
     }
 
     fn parse_function(&mut self) -> Option<Node> {
@@ -181,30 +183,37 @@ impl AstBuilder {
             error!("unexpected token {:?} while parsing fn header", token);
             break;
         }
+        // let params = self.parse_list(LeftParen, RightParen)?.into_iter().map(|name|match name{
+        //     Name(s)=>s,
+        //     n=>{
+        //         error!("{n:?} was found instead of Name while parsing function header");
+        //         return None;
+        //     }
+        // });
 
         Some(Node::FnDeclare(FunctionDefAst {
             name,
             paramaters: params,
-            body: self.parse_scope(),
+            body: self.parse_scope()?,
         }))
     }
-    fn parse_scope(&mut self) -> Vec<Node> {
-        // self.parse_list(LeftBrace,RightBrace)
-        if !self.consume_if(|t| t == &LeftBrace) {
-            warn!("not left brace to start scope");
-        }
+    fn parse_scope(&mut self) -> Option<Vec<Node>> {
+        self.parse_list(LeftBrace, RightBrace, SemiColon)
+        // if !self.consume_if(|t| t == &LeftBrace) {
+        //     warn!("not left brace to start scope");
+        // }
 
-        let mut scope = Vec::new();
-        while let Some(token) = self.next() {
-            if token == RightBrace {
-                break;
-            }
-            if let Some(var) = self.parse_expr(token, &SemiColon) {
-                scope.push(var);
-            }
-        }
+        // let mut scope = Vec::new();
+        // while let Some(token) = self.next() {
+        //     if token == RightBrace {
+        //         break;
+        //     }
+        //     if let Some(var) = self.parse_expr(token, &SemiColon) {
+        //         scope.push(var);
+        //     }
+        // }
 
-        scope
+        // scope
     }
     fn parse_name(&mut self, name: String) -> Option<Node> {
         if self.peek() == Some(&LeftParen) {

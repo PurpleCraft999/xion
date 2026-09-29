@@ -1,7 +1,7 @@
 use crate::{
     ast::{
         AstBuilder, ClassAst, FnCallAst, FunctionDefAst,
-        Node::{self, *},
+        Node::{self, StringLiteral, *},
         VarAst,
     },
     token::Token::{self, *},
@@ -133,6 +133,31 @@ fn class_declaration() {
         vec![Node::ClassDeclare(ClassAst {
             name: "MyClass".to_string(),
             fields: vec![],
+        })],
+        ast
+    );
+}
+
+#[test]
+fn class_delcaration_with_variable() {
+    let ast = ast(vec![
+        Class,
+        Name("MyClass"),
+        LeftBrace,
+        Let,
+        Name("field"),
+        Equals,
+        Token::StringLiteral("hello world".to_string()),
+        SemiColon,
+        RightBrace,
+    ]);
+    assert_eq!(
+        vec![Node::ClassDeclare(ClassAst {
+            name: "MyClass".to_string(),
+            fields: vec![VarDeclare(Box::new(VarAst {
+                name: "field".to_string(),
+                value: StringLiteral("hello world".to_string())
+            }))]
         })],
         ast
     );

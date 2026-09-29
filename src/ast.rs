@@ -72,18 +72,18 @@ impl AstBuilder {
         Option<&'expr Token>: From<&'expr E>,
     {
         let node = match token {
-            StringLiteral(name) => {
-                //strings only support addition
-                if self.peek() == Some(&Plus) {
-                    self.tree.push(Node::StringLiteral(name));
-                    let n = self.next().expect("we just peeked ahead and saw a value");
-                    self.parse_expr(n, end_token)
-                } else {
-                    Some(Node::StringLiteral(name))
-                }
-            }
+            // StringLiteral(name) => {
+            //     //strings only support addition
+            //     if self.peek() == Some(&Plus) {
+            //         self.tree.push(Node::StringLiteral(name));
+            //         let n = self.next().expect("we just peeked ahead and saw a value");
+            //         self.parse_expr(n, end_token)
+            //     } else {
+            //         Some(Node::StringLiteral(name))
+            //     }
+            // }
             // Name(name) => self.parse_name(name),
-            NumberLiteral(_) | Name(_) | LeftParen => {
+            NumberLiteral(_) | Name(_) |StringLiteral(_) | LeftParen => {
                 pratt_parser::parse_expression(self, 0, token, end_token.into())
             }
             Return => {
@@ -382,11 +382,7 @@ mod pratt_parser {
                 return None;
             }
             Token::NumberLiteral(num) => super::Node::NumberLiteral(num),
-            // Token::Op('(') => {
-            //     let lhs = parse_expression(lexer, 0.0);
-            //     assert_eq!(lexer.next(), Token::Op(')'));
-            //     lhs
-            // }
+            Token::StringLiteral(string)=>super::Node::StringLiteral(string),
             t => {
                 error!("bad token: {:?}", t);
                 return None;

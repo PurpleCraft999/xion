@@ -252,6 +252,12 @@ impl Value {
 }
 
 fn vec_to_string<T: ToString>(vec: &Vec<T>) -> String {
+    if vec.len()==0{
+        return String::from("[]");
+    }
+
+
+
     let mut vec_str = String::from('[');
     for item in vec {
         vec_str += &item.to_string();

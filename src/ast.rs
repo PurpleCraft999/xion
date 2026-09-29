@@ -136,22 +136,16 @@ impl AstBuilder {
     fn parse_list(&mut self, start: Token, end: Token) -> Option<Vec<Node>> {
         let mut args = Vec::new();
         if !self.consume_if(|t| t == &start) {
-            error!("List does not start with token: {start:?}");
-            return None;
+            warn!("List does not start with token: {start:?}");
+            // return None;
         }
-        let mut depth = 0u16;
         while let Some(token) = self.next() {
-            debug!("depth = {depth}, token = {token:?}, end token = {end:?}");
+            debug!("token = {token:?}, end token = {end:?}");
             if token == end {
-                if depth == 0 {
-                    break;
-                } else {
-                    depth -= 1;
-                }
+                break;
+
             }
-            if token == start {
-                depth += 1;
-            }
+
 
             if let Some(expr) = self.parse_expr(token, &None) {
                 args.push(expr);
@@ -344,7 +338,7 @@ pub struct FunctionDefAst {
 }
 
 mod pratt_parser {
-    use log::{debug, error};
+    use log::{debug, error, warn};
 
     use crate::{
         ast::{AstBuilder, MathSign},
@@ -400,7 +394,7 @@ mod pratt_parser {
             }
 
             let op = match peek {
-                Some(Token::RightParen) | None => break,
+                Some(Token::RightParen) | None |Some(Token::RightBracket)|Some(Token::SemiColon) => break,
                 Some(Token::Plus) => MathSign::Plus,
                 Some(Token::Minus) => MathSign::Minus,
                 Some(Token::Asterisk) => MathSign::Multiply,
@@ -410,8 +404,8 @@ mod pratt_parser {
                 //     break;
                 // },
                 Some(t) => {
-                    error!("bad op: {:?}", t);
-                    return None;
+                    warn!("unexpeced operator: {:?}", t);
+                    return Some(lhs);
                 }
             };
             let (l_bp, r_bp) = infix_binding_power(&op);

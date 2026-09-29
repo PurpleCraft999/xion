@@ -1,1 +1,2 @@
-print(50/2);
+let a = [50];
+print(a);

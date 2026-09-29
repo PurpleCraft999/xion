@@ -5,6 +5,7 @@ use log::{debug, error};
 use crate::ast::Node::*;
 use crate::ast::{MathSign, Node};
 use crate::functions::{Function, NativeFunction, NativeFunctionHeader, NonNativeFunction};
+use crate::runtime::MathError::InvalidTypeRight;
 use crate::xion_std;
 
 #[derive(Debug, Clone)]
@@ -135,11 +136,19 @@ impl Runtime {
                 if let Some(left) = left
                     && let Some(right) = right
                 {
-                    Some(match op {
-                        MathSign::Plus => left.add(&right).ok()?,
-                        MathSign::Minus => left.sub(&right).ok()?,
-                        MathSign::Multiply => left.mul(&right).ok()?,
-                    })
+                    let result = match op {
+                        MathSign::Plus => left.add(&right),
+                        MathSign::Minus => left.sub(&right),
+                        MathSign::Multiply => left.mul(&right),
+                    };
+                    if let Ok(value) = result {
+                        Some(value)
+                    } else if let Err(err) = result {
+                        error!("invalid math operation {err:?}");
+                        None
+                    } else {
+                        unreachable!("it must be either Ok or Err")
+                    }
                 } else {
                     None
                 }
@@ -211,12 +220,15 @@ impl Value {
     }
     fn mul(&self, other: &Value) -> Result<Value, MathError> {
         match self {
-            Value::Bool(_) | Value::String(_) | Value::Array(_) => Err(MathError::InvalidTypeLeft),
+            Value::Bool(_) | Value::Array(_) => Err(MathError::InvalidTypeLeft),
             Value::Number(left) => match other {
-                Value::Bool(_) | Value::String(_) | Value::Array(_) => {
-                    Err(MathError::InvalidTypeRight)
-                }
+                Value::Bool(_) | Value::Array(_) => Err(MathError::InvalidTypeRight),
                 Value::Number(right) => Ok(Value::Number(*left * *right)),
+                Value::String(right) => string_mult(right, *left).map(Value::String),
+            },
+            Value::String(left) => match other {
+                Value::Number(right) => string_mult(left, *right).map(Value::String),
+                Value::Array(_) | Value::Bool(_) | Value::String(_) => Err(InvalidTypeRight),
             },
         }
     }
@@ -231,6 +243,17 @@ fn vec_to_string<T: ToString>(vec: &Vec<T>) -> String {
     vec_str.pop();
     vec_str.push(']');
     vec_str
+}
+fn string_mult(string: &str, int: i64) -> Result<String, MathError> {
+    if int < 0 {
+        Err(MathError::UnexpectedNegativeInt)
+    } else {
+        let mut new = String::new();
+        for _ in 0..int {
+            new += string;
+        }
+        Ok(new)
+    }
 }
 
 impl std::fmt::Display for Value {
@@ -249,6 +272,7 @@ impl std::fmt::Display for Value {
 enum MathError {
     InvalidTypeLeft,
     InvalidTypeRight,
+    UnexpectedNegativeInt,
 }
 
 #[derive(Debug, Clone)]

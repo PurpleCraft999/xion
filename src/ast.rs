@@ -83,7 +83,7 @@ impl AstBuilder {
             //     }
             // }
             // Name(name) => self.parse_name(name),
-            NumberLiteral(_) | Name(_) |StringLiteral(_) | LeftParen => {
+            NumberLiteral(_) | Name(_) | StringLiteral(_) | LeftParen => {
                 pratt_parser::parse_expression(self, 0, token, end_token.into())
             }
             Return => {
@@ -382,7 +382,7 @@ mod pratt_parser {
                 return None;
             }
             Token::NumberLiteral(num) => super::Node::NumberLiteral(num),
-            Token::StringLiteral(string)=>super::Node::StringLiteral(string),
+            Token::StringLiteral(string) => super::Node::StringLiteral(string),
             t => {
                 error!("bad token: {:?}", t);
                 return None;
@@ -422,7 +422,7 @@ mod pratt_parser {
             let rhs = parse_expression(lexer, r_bp, next, end_token)?;
             lhs = super::Node::Math {
                 left: Box::new(lhs),
-                op: op,
+                op,
                 right: Box::new(rhs),
             };
         }

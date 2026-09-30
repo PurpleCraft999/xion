@@ -1,9 +1,13 @@
 class Name{
 
     let x = 40;
+    let name = "";
 }
 
 
 let name = Name(x:3);
 let name2 = Name();
 print(name);print(name2);
+
+let names = [Name(),Name(x:400)];
+print(names);

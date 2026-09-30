@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::{Debug, Display};
 use std::rc::Rc;
 
 use log::{debug, error};
@@ -316,10 +317,10 @@ impl std::fmt::Display for Value {
         let string_value = match self {
             Self::Bool(b) => b.to_string(),
             Self::Number(n) => n.to_string(),
-            Self::String(s) => s.to_owned(),
+            Self::String(s) => format!("{s:?}"),
             Self::Array(v) => vec_to_string(v),
             //temp
-            Self::Object(o) => format!("{o:?}"),
+            Self::Object(o) => o.to_string(),
         };
         write!(f, "{string_value}")
     }
@@ -465,6 +466,28 @@ impl Class {
 pub struct ClassInstance {
     class: Rc<Class>,
     fields: HashMap<String, Variable>,
+}
+impl ClassInstance{
+
+
+
+
+
+}
+impl Display for ClassInstance{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut fields = String::new();
+        for (name,var) in &self.fields{
+            fields+=name;
+            fields.push('=');
+            fields+=&var.value.to_string();
+            fields.push(',');
+        }
+        fields.pop();
+
+
+        write!(f,"{}Instance{{ fields:[{fields}] }}",self.class.name)
+    }
 }
 
 #[cfg(test)]

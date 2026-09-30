@@ -30,5 +30,6 @@ pub fn input(_: Vec<Value>) -> Option<Value> {
 }
 
 pub fn instantiate(_: Input) -> Output {
+    log::error!("instantiate was called directly");
     None
 }

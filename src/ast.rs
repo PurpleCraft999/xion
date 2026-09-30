@@ -46,6 +46,11 @@ impl AstBuilder {
 
         let fields = self.parse_list(LeftBrace, RightBrace, SemiColon)?;
 
+        // if !fields.clone().iter().all(|n|matches!(n,Node::VarDeclare(_))){
+        //     error!("Unexpected item in class body");
+        //     return None;
+        // }
+
         Some(Node::ClassDeclare(ClassAst {
             name: class_name,
             fields,
@@ -94,12 +99,12 @@ impl AstBuilder {
                 _ => None,
             },
             LeftBracket => self.parse_array(),
-
             Let => self.parse_var(),
+            Fn => self.parse_function(),
             True => Some(Node::BoolLiteral(true)),
             False => Some(Node::BoolLiteral(false)),
-            Fn | LeftBrace | RightBrace | RightParen | SemiColon | Comma | Colon | WhiteSpace
-            | Equals | EOF | Class | Plus | Asterisk | RightBracket | Division => {
+            LeftBrace | RightBrace | RightParen | SemiColon | Comma | Colon | WhiteSpace
+            | Equals | EOF | Class | Plus | Asterisk | RightBracket | Division | Dot => {
                 error!("unexpected token while parsing expresion: {:?}", token);
                 None
             }
@@ -122,6 +127,7 @@ impl AstBuilder {
             None
         }
     }
+
     fn parse_list(&mut self, start: Token, end: Token, sep: Token) -> Option<Vec<Node>> {
         let mut args = Vec::new();
         if !self.consume_if(|t| t == &start) {
@@ -183,13 +189,6 @@ impl AstBuilder {
             error!("unexpected token {:?} while parsing fn header", token);
             break;
         }
-        // let params = self.parse_list(LeftParen, RightParen)?.into_iter().map(|name|match name{
-        //     Name(s)=>s,
-        //     n=>{
-        //         error!("{n:?} was found instead of Name while parsing function header");
-        //         return None;
-        //     }
-        // });
 
         Some(Node::FnDeclare(FunctionDefAst {
             name,
@@ -199,46 +198,62 @@ impl AstBuilder {
     }
     fn parse_scope(&mut self) -> Option<Vec<Node>> {
         self.parse_list(LeftBrace, RightBrace, SemiColon)
-        // if !self.consume_if(|t| t == &LeftBrace) {
-        //     warn!("not left brace to start scope");
-        // }
-
-        // let mut scope = Vec::new();
-        // while let Some(token) = self.next() {
-        //     if token == RightBrace {
-        //         break;
-        //     }
-        //     if let Some(var) = self.parse_expr(token, &SemiColon) {
-        //         scope.push(var);
-        //     }
-        // }
-
-        // scope
     }
     fn parse_name(&mut self, name: String) -> Option<Node> {
         let peeked = self.peek();
-        if peeked == Some(&LeftParen) {
-            let args = self.parse_args()?;
+        match peeked {
+            Some(LeftParen) => {
+                let args = self.parse_args()?;
 
-            Some(Node::FnCall(FnCallAst { name, args }))
-        } else if peeked == Some(&Equals) {
-            self.next();
-            let new_value = self.next()?;
-            Some(Node::VarReasign {
-                name,
-                new_value: Box::new(self.parse_expr(new_value, &None)?),
-            })
-        } else if peeked == Some(&Colon) {
+                Some(Node::FnCall(FnCallAst { name, args }))
+            }
+            Some(Equals) => {
+                self.next();
+                let new_value = self.next()?;
+                Some(Node::VarReasign {
+                    name,
+                    new_value: Box::new(self.parse_expr(new_value, &None)?),
+                })
+            }
             //this branch is for assigning instance vars
-            self.next();
-            let new_value = self.next()?;
+            Some(Colon) => {
+                self.next();
+                let new_value = self.next()?;
 
-            Some(Node::VarReasign {
-                name,
-                new_value: Box::new(self.parse_expr(new_value, &None)?),
-            })
-        } else {
-            Some(Node::VarRef(name))
+                Some(Node::VarReasign {
+                    name,
+                    new_value: Box::new(self.parse_expr(new_value, &None)?),
+                })
+            }
+            Some(Dot) => {
+                self.next();
+                let accessed_name = self.next_if_name()?;
+                let peeked = self.peek();
+                match peeked {
+                    Some(LeftParen) => {
+                        let args = self.parse_args()?;
+                        Some(Node::MethodCall {
+                            var_name: name,
+                            method_name: accessed_name,
+                            args,
+                        })
+                    }
+                    Some(Equals) => {
+                        self.next();
+                        let value = self.next()?;
+                        Some(Node::FieldReasign {
+                            var_name: name,
+                            field_name: accessed_name,
+                            new_value: Box::new(self.parse_expr(value, &None)?),
+                        })
+                    }
+                    _ => Some(Node::FieldAccess {
+                        var_name: name,
+                        field_name: accessed_name,
+                    }),
+                }
+            }
+            _ => Some(Node::VarRef(name)),
         }
     }
 
@@ -314,6 +329,20 @@ pub enum Node {
         left: Box<Node>,
         op: MathSign,
         right: Box<Node>,
+    },
+    MethodCall {
+        var_name: String,
+        method_name: String,
+        args: Vec<Node>,
+    },
+    FieldAccess {
+        var_name: String,
+        field_name: String,
+    },
+    FieldReasign {
+        var_name: String,
+        field_name: String,
+        new_value: Box<Node>,
     },
 }
 #[derive(Debug, Clone)]

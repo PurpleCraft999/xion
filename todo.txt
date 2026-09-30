@@ -7,8 +7,7 @@ add properties to types and methods
 modules
 When added modules make sure to update runtime class creation code 
 
-FIX ARRAYS AND ANY OTHER LISTS THAT ARE BROKEN
-
+make tests for field and method stuff
 
 consider merging two arrays with +
 if statements

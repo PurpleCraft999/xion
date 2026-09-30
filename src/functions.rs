@@ -1,6 +1,5 @@
 use crate::{
-    ast::Node,
-    runtime::{Runtime, Scope, Value, Variable},
+    ast::Node, runtime::{Runtime, Scope, Value, Variable},
 };
 
 #[derive(Debug, Clone)]

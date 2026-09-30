@@ -124,6 +124,7 @@ pub enum Token {
     Minus,
     Asterisk,
     Division,
+    Dot,
 }
 
 impl Token {
@@ -159,6 +160,7 @@ impl Token {
             '-' => Minus,
             '*' => Asterisk,
             '/' => Division,
+            '.'=>Dot,
             whitespace if is_whitespace(whitespace) => WhiteSpace,
             _ => return None,
         };

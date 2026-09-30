@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::rc::Rc;
 
-use log::{debug, error};
+use log::{debug, error, warn};
 
 use crate::ast::Node::*;
 use crate::ast::{MathSign, Node};
@@ -42,10 +42,9 @@ impl Runtime {
         match node {
             VarDeclare(var_ast) => {
                 if let Some(value) = self.eval(var_ast.value) {
-                    let var = Variable::new(value);
                     if self
                         .get_current_scope_mut()
-                        .add_var(var_ast.name.clone(), var)
+                        .add_var(var_ast.name.clone(), Variable::new(value))
                         .is_err()
                     {
                         error!("variable {} already exists cannot crease", var_ast.name);
@@ -57,10 +56,14 @@ impl Runtime {
                 None
             }
             StringLiteral(str) => Some(Value::String(str)),
-            VarRef(var) => self.get_current_scope().get_var_value(&var).cloned(),
+            VarRef(var) => self
+                .get_current_scope()
+                .get_var(&var)
+                .map(|v| (*v.get()).clone()),
             VarReasign { name, new_value } => {
-                let var = Variable::new(self.eval(*new_value)?);
+                let var = self.eval(*new_value)?;
 
+                // self.get_current_scope().get_var(&name).and_then(|v|v.value)
                 if self.get_current_scope_mut().update_var(&name, var).is_err() {
                     error!("cannot reassign var {name} because it does not exist");
                 }
@@ -75,6 +78,7 @@ impl Runtime {
                 let runtime_class = Class {
                     name: class.name.clone(),
                     fields: runtime.current_scope.vars,
+                    methods: runtime.current_scope.functions,
                 };
                 if self
                     .get_current_scope_mut()
@@ -111,12 +115,10 @@ impl Runtime {
                     error!("tried to call unknown function {}", func_ast.name);
                     return None;
                 };
-
+                //class constructor
                 match func {
                     Function::Native(_) => {
-                        if let Some(class) = self.get_current_scope().get_class(&func_ast.name)
-                            
-                        {
+                        if let Some(class) = self.get_current_scope().get_class(&func_ast.name) {
                             debug!("instantiating class {class:?}");
                             let mut instance = class.instantiate();
                             let mut scope = Scope::new();
@@ -132,14 +134,10 @@ impl Runtime {
                     Function::NonNative(_) => (),
                 }
 
-                let mut arguments = Vec::new();
-                for node in func_ast.args {
-                    if let Some(node) = self.eval(node) {
-                        arguments.push(node)
-                    }
-                }
+                //evaluates any variable names and the like
+                let arguments = self.eval_list(func_ast.args);
 
-                func.call(arguments, self.scope())
+                func.call(arguments, self.child_scope())
             }
             BoolLiteral(b) => Some(Value::Bool(b)),
             Return(value) => {
@@ -181,11 +179,87 @@ impl Runtime {
             ArrayLiteral(vec) => Some(Value::Array(
                 vec.into_iter().map_while(|n| self.eval(n)).collect(),
             )),
+            MethodCall {
+                var_name,
+                method_name,
+                args,
+            } => {
+                let args = self.eval_list(args);
+                let Some(var) = self.get_current_scope().get_var(&var_name) else {
+                    error!("tried to invoke method on non existing var");
+                    return None;
+                };
+
+                match &*var.get() {
+                    Value::Object(obj) => {
+                        match obj.call_method(&method_name, args, self.child_scope()) {
+                            Ok(r) => r,
+                            Err(_) => {
+                                error!(
+                                    "tried to call method {method_name} on {var_name} but the type of {} does not have that method",
+                                    obj.class.name
+                                );
+                                None
+                            }
+                        }
+                    }
+                    _ => None,
+                }
+            }
+            FieldAccess {
+                var_name,
+                field_name,
+            } => {
+                let Some(var) = self.get_current_scope().get_var(&var_name) else {
+                    error!("tried to invoke method on non existing var");
+                    return None;
+                };
+                match &*var.get() {
+                    Value::Object(obj) => match obj.fields.get(&field_name) {
+                        Some(v) => Some(v.get().clone()),
+                        None => None,
+                    },
+                    _ => None,
+                }
+            }
+            FieldReasign {
+                var_name,
+                field_name,
+                new_value,
+            } => {
+                let new_value = self.eval(*new_value)?;
+                let Some(var) = self.get_current_scope_mut().get_var_mut(&var_name) else {
+                    error!("tried to invoke method on non existing var");
+                    return None;
+                };
+                match var.get_mut() {
+                    Value::Object(obj) => match obj.fields.get_mut(&field_name) {
+                        Some(v) =>{
+                            v.value=new_value;
+                            None
+
+                        },
+                        None => None,
+                    },
+                    _ => None,
+                }
+            }
         }
     }
     ///makes a child scope
-    fn scope(&self) -> Scope {
+    fn child_scope(&self) -> Scope {
         Scope::with_parent(self.get_current_scope().clone())
+    }
+
+    fn eval_list(&mut self, vec: Vec<Node>) -> Vec<Value> {
+        let mut arguments = Vec::new();
+
+        for node in vec {
+            if let Some(node) = self.eval(node) {
+                arguments.push(node)
+            }
+        }
+        arguments
     }
 
     pub fn run(&mut self) -> Option<Value> {
@@ -284,6 +358,8 @@ impl Value {
             ),
         }
     }
+
+    // fn call_method(&mut self)
 }
 
 fn vec_to_string<T: ToString>(vec: &Vec<T>) -> String {
@@ -377,13 +453,20 @@ impl Scope {
         Ok(())
     }
 
-    fn update_var(&mut self, name: &str, var: Variable) -> Result<(), DoesNotExist> {
+    fn update_var(&mut self, name: &str, var: Value) -> Result<(), DoesNotExist> {
         match self.vars.get_mut(name) {
             Some(value) => {
-                *value = var;
+                *value.get_mut() = var;
                 Ok(())
             }
-            None => Err(DoesNotExist),
+            None => {
+                if let Some(parent) = &self.parent_scope {
+                    if parent.vars.contains_key(name) {
+                        warn!("tried to update read only variable from parent scope")
+                    }
+                }
+                Err(DoesNotExist)
+            }
         }
     }
 
@@ -397,18 +480,19 @@ impl Scope {
         Ok(())
     }
 
-    pub fn get_var(&self, name: &str) -> Option<&Variable> {
+    pub fn get_var_mut(&mut self, name: &str) -> Option<&mut Variable> {
+        self.vars.get_mut(name).or_else(|| match &mut self.parent_scope {
+            Some(scope) => scope.get_var_mut(name),
+            None => None,
+        })
+    }
+    pub fn get_var(&self,name: &str)->Option<&Variable>{
         self.vars.get(name).or_else(|| match &self.parent_scope {
             Some(scope) => scope.get_var(name),
             None => None,
         })
     }
-    pub fn get_var_value(&self, name: &str) -> Option<&Value> {
-        match self.get_var(name) {
-            Some(v) => Some(&v.value),
-            None => None,
-        }
-    }
+
     pub fn get_function(&self, name: &str) -> Option<&Function> {
         self.functions.get(name).or(match &self.parent_scope {
             Some(s) => s.get_function(name),
@@ -437,7 +521,7 @@ impl Scope {
 #[derive(Debug)]
 pub struct AlreadyExists;
 #[derive(Debug)]
-struct DoesNotExist;
+pub struct DoesNotExist;
 
 #[derive(Debug, Clone)]
 pub struct Variable {
@@ -445,7 +529,13 @@ pub struct Variable {
 }
 impl Variable {
     pub fn new(value: Value) -> Self {
-        Self { value }
+        Self { value: value }
+    }
+    pub fn get(&self) -> &Value {
+        &self.value
+    }
+    pub fn get_mut(&mut self) -> &mut Value {
+        &mut self.value
     }
 }
 
@@ -453,6 +543,7 @@ impl Variable {
 pub struct Class {
     name: String,
     fields: HashMap<String, Variable>,
+    methods: HashMap<String, Function>,
 }
 impl Class {
     pub fn instantiate(self: &Rc<Self>) -> ClassInstance {
@@ -467,26 +558,34 @@ pub struct ClassInstance {
     class: Rc<Class>,
     fields: HashMap<String, Variable>,
 }
-impl ClassInstance{
+impl ClassInstance {
+    pub fn call_method(
+        &self,
+        name: &str,
+        args: Vec<Value>,
+        mut scope: Scope,
+    ) -> Result<Option<Value>, DoesNotExist> {
+        let Some(method) = self.class.methods.get(name) else {
+            return Err(DoesNotExist);
+        };
+        scope.vars.extend(self.fields.clone().into_iter());
 
-
-
-
-
+        Ok(method.call(args, scope))
+        // return Ok(None);
+    }
 }
-impl Display for ClassInstance{
+impl Display for ClassInstance {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut fields = String::new();
-        for (name,var) in &self.fields{
-            fields+=name;
+        for (name, var) in &self.fields {
+            fields += name;
             fields.push('=');
-            fields+=&var.value.to_string();
+            fields += &var.get().to_string();
             fields.push(',');
         }
         fields.pop();
 
-
-        write!(f,"{}Instance{{ fields:[{fields}] }}",self.class.name)
+        write!(f, "{}Instance{{ fields:[{fields}] }}", self.class.name)
     }
 }
 

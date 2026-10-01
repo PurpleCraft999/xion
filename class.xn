@@ -1,14 +1,19 @@
-class Name{
-    let name="john";
-
-    fn namePlus(new){
-        return name+new;
+class Point{
+    let x = 0;
+    let y = 0;
+    fn move(newX,newY){
+        x=newX;
+        y=newY;
+        return hello;
     }
-
-
 }
 
 
-let n = Name(name:"emma");
-n.name="jim";
-print(n.namePlus(" carry"));
+
+let point = Point(x:50);
+
+#let hello = "hello";
+
+let s = point.move(63,344);
+print(point);
+print(x);

@@ -1,5 +1,6 @@
 use crate::{
-    ast::Node, runtime::{Runtime, Scope, Value, Variable},
+    ast::Node,
+    runtime::{Runtime, Scope, Value, Variable},
 };
 
 #[derive(Debug, Clone)]
@@ -27,7 +28,6 @@ impl NativeFunction {
         Self { func }
     }
 }
-
 
 #[derive(Debug, Clone)]
 pub struct NonNativeFunction {

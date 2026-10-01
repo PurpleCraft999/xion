@@ -2,8 +2,8 @@ use xion::{ast::AstBuilder, runtime::Runtime, token::Lexer};
 
 fn main() {
     log::set_max_level(log::LevelFilter::Info);
-    log::set_boxed_logger(Box::new(simple_logger::SimpleLogger::new())).expect("only returns error when the logger is already set");
-
+    log::set_boxed_logger(Box::new(simple_logger::SimpleLogger::new()))
+        .expect("only returns error when the logger is already set");
 
     let file = std::fs::read_to_string("class.xn").unwrap();
     let lexer = Lexer::new(&file);

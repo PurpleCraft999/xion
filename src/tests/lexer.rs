@@ -2,9 +2,7 @@ use super::{
     Lexer,
     Token::{self, *},
 };
-// use crate::token::{Lexer,Token::{self,WhiteSpace}};
-// use xion::token::Lexer;
-// #[cfg(test)]
+
 fn lex(str: &str) -> Vec<Token> {
     crate::test_log::init_logger();
     let mut v = Lexer::new(str).lex();
@@ -62,7 +60,7 @@ fn parse_function_with_args() {
 
 #[test]
 fn parse_chars() {
-    let lexed = lex("= / * + - ; { } [ ] , ( )");
+    let lexed = lex("= / * + - ; { } [ ] , ( ) :");
     assert_eq!(
         vec![
             Equals,
@@ -77,7 +75,8 @@ fn parse_chars() {
             RightBracket,
             Comma,
             LeftParen,
-            RightParen
+            RightParen,
+            Colon,
         ],
         lexed
     )

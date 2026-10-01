@@ -160,7 +160,7 @@ impl Token {
             '-' => Minus,
             '*' => Asterisk,
             '/' => Division,
-            '.'=>Dot,
+            '.' => Dot,
             whitespace if is_whitespace(whitespace) => WhiteSpace,
             _ => return None,
         };
@@ -178,4 +178,4 @@ pub const KEY_WORD_CLASS: &str = "class";
 
 #[cfg(test)]
 #[path = "tests/lexer.rs"]
-mod lexer;
+mod test;

@@ -1,5 +1,7 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
+use std::hash::Hash;
 use std::rc::Rc;
 
 use log::{debug, error, warn};
@@ -56,14 +58,11 @@ impl Runtime {
                 None
             }
             StringLiteral(str) => Some(Value::String(str)),
-            VarRef(var) => self
-                .get_current_scope()
-                .get_var(&var)
-                .map(|v| (*v.get()).clone()),
+            VarRef(var) => self.get_current_scope().with_var(&var, |v| v.get().clone()),
+
             VarReasign { name, new_value } => {
                 let var = self.eval(*new_value)?;
 
-                // self.get_current_scope().get_var(&name).and_then(|v|v.value)
                 if self.get_current_scope_mut().update_var(&name, var).is_err() {
                     error!("cannot reassign var {name} because it does not exist");
                 }
@@ -107,14 +106,15 @@ impl Runtime {
                 None
             }
             FnCall(func_ast) => {
+
                 let Some(func) = self
                     .get_current_scope()
-                    .get_function(&func_ast.name)
-                    .cloned()
+                    .with_function(&func_ast.name, |func| func.clone())
                 else {
                     error!("tried to call unknown function {}", func_ast.name);
                     return None;
                 };
+
                 //class constructor
                 match func {
                     Function::Native(_) => {
@@ -135,7 +135,8 @@ impl Runtime {
                 }
 
                 //evaluates any variable names and the like
-                let arguments = self.eval_list(func_ast.args);
+                let args = func_ast.args;
+                let arguments = self.eval_list(args);
 
                 func.call(arguments, self.child_scope())
             }
@@ -147,8 +148,6 @@ impl Runtime {
                     None
                 };
                 self.return_value = value;
-                //force execution to stop by removing all remaining nodes
-                self.nodes = Vec::new();
 
                 None
             }
@@ -185,14 +184,14 @@ impl Runtime {
                 args,
             } => {
                 let args = self.eval_list(args);
-                let Some(var) = self.get_current_scope().get_var(&var_name) else {
-                    error!("tried to invoke method on non existing var");
-                    return None;
-                };
 
-                match &*var.get() {
+                let s =self.get_current_scope_mut().with_var_mut(&var_name, |var|{
+
+                 match var.get_mut() {
                     Value::Object(obj) => {
-                        match obj.call_method(&method_name, args, self.child_scope()) {
+
+
+                        match obj.call_method(&method_name, args) {
                             Ok(r) => r,
                             Err(_) => {
                                 error!(
@@ -204,23 +203,26 @@ impl Runtime {
                         }
                     }
                     _ => None,
+                }});
+                match s {
+                    Some(v) => v,
+                    None => {
+                        error!("tried to invoke method on non existing var");
+                        None
+                    }
                 }
             }
             FieldAccess {
                 var_name,
                 field_name,
             } => {
-                let Some(var) = self.get_current_scope().get_var(&var_name) else {
-                    error!("tried to invoke method on non existing var");
-                    return None;
-                };
-                match &*var.get() {
-                    Value::Object(obj) => match obj.fields.get(&field_name) {
-                        Some(v) => Some(v.get().clone()),
-                        None => None,
-                    },
-                    _ => None,
-                }
+
+                self.get_current_scope()
+                    .with_var(&var_name, |var| match &var.get() {
+                        Value::Object(obj) => obj.fields.get(&field_name).map(|v|v.get().clone()),
+                        _ => None,
+                    })
+                    .flatten()
             }
             FieldReasign {
                 var_name,
@@ -228,21 +230,19 @@ impl Runtime {
                 new_value,
             } => {
                 let new_value = self.eval(*new_value)?;
-                let Some(var) = self.get_current_scope_mut().get_var_mut(&var_name) else {
-                    error!("tried to invoke method on non existing var");
-                    return None;
-                };
-                match var.get_mut() {
-                    Value::Object(obj) => match obj.fields.get_mut(&field_name) {
-                        Some(v) =>{
-                            v.value=new_value;
-                            None
 
+                self.get_current_scope_mut()
+                    .with_var_mut(&var_name, |var| match var.get_mut() {
+                        Value::Object(obj) => match obj.fields.get_mut(&field_name) {
+                            Some(v) => {
+                                v.value = new_value;
+                                None
+                            }
+                            None => None,
                         },
-                        None => None,
-                    },
-                    _ => None,
-                }
+                        _ => None,
+                    })
+                    .flatten()
             }
         }
     }
@@ -266,12 +266,15 @@ impl Runtime {
         let nodes = std::mem::take(&mut self.nodes);
         for node in nodes {
             self.eval(node);
+            if self.return_value.is_some() {
+                break;
+            }
         }
         debug!("{self:?}");
         self.return_value.take()
     }
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     String(String),
     Number(i64),
@@ -358,8 +361,6 @@ impl Value {
             ),
         }
     }
-
-    // fn call_method(&mut self)
 }
 
 fn vec_to_string<T: ToString>(vec: &Vec<T>) -> String {
@@ -393,9 +394,8 @@ impl std::fmt::Display for Value {
         let string_value = match self {
             Self::Bool(b) => b.to_string(),
             Self::Number(n) => n.to_string(),
-            Self::String(s) => format!("{s:?}"),
+            Self::String(s) => s.to_owned(),
             Self::Array(v) => vec_to_string(v),
-            //temp
             Self::Object(o) => o.to_string(),
         };
         write!(f, "{string_value}")
@@ -409,22 +409,48 @@ enum MathError {
     UnexpectedNegativeInt,
     DivisionByZero,
 }
-
 #[derive(Debug, Clone)]
+enum ParentScope {
+    Normal(Box<Scope>),
+    Mut(Rc<std::cell::RefCell<Scope>>),
+}
+impl ParentScope {
+    fn with_var_mut<T>(&mut self, name: &str, c: impl FnOnce(&mut Variable) -> T) -> Option<T> {
+        match self {
+            ParentScope::Mut(p) => p.borrow_mut().with_var_mut(name, c),
+            ParentScope::Normal(p) => p.with_var_mut(name, c),
+        }
+    }
+    fn with_var<T>(&self, name: &str, c: impl FnOnce(&Variable) -> T) -> Option<T> {
+        match self {
+            ParentScope::Mut(p) => p.borrow_mut().with_var(name, c),
+            ParentScope::Normal(p) => p.with_var(name, c),
+        }
+    }
+    fn with_function<T>(&self, name: &str, c: impl FnOnce(&Function) -> T) -> Option<T> {
+        match self {
+            ParentScope::Mut(p) => p.borrow_mut().with_function(name, c),
+            ParentScope::Normal(p) => p.with_function(name, c),
+        }
+    }
+    fn get_class(&self, name: &str) -> Option<Rc<Class>> {
+        match self {
+            ParentScope::Mut(m) => m.borrow().get_class(name),
+            ParentScope::Normal(p) => p.get_class(name),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct Scope {
-    parent_scope: Option<Box<Scope>>,
+    parent_scope: Option<ParentScope>,
     vars: HashMap<String, Variable>,
     functions: HashMap<String, Function>,
     classes: HashMap<String, Rc<Class>>,
 }
 impl Scope {
-    fn new() -> Self {
-        Self {
-            parent_scope: None,
-            vars: HashMap::new(),
-            functions: HashMap::new(),
-            classes: HashMap::new(),
-        }
+    pub fn new() -> Self {
+        Self::default()
     }
     fn attach_std_lib(&mut self) {
         self.add_native_fn("print", xion_std::print);
@@ -437,10 +463,14 @@ impl Scope {
 
     fn with_parent(scope: Scope) -> Self {
         Self {
-            parent_scope: Some(Box::new(scope)),
-            vars: HashMap::new(),
-            functions: HashMap::new(),
-            classes: HashMap::new(),
+            parent_scope: Some(ParentScope::Normal(Box::new(scope))),
+            ..Default::default()
+        }
+    }
+    fn with_mutable_parent(scope: Rc<RefCell<Scope>>) -> Self {
+        Self {
+            parent_scope: Some(ParentScope::Mut(scope)),
+            ..Default::default()
         }
     }
 
@@ -453,19 +483,34 @@ impl Scope {
         Ok(())
     }
 
-    fn update_var(&mut self, name: &str, var: Value) -> Result<(), DoesNotExist> {
+    fn update_var(&mut self, name: &str, var_value: Value) -> Result<(), DoesNotExist> {
         match self.vars.get_mut(name) {
             Some(value) => {
-                *value.get_mut() = var;
+                *value.get_mut() = var_value;
                 Ok(())
             }
             None => {
                 if let Some(parent) = &self.parent_scope {
-                    if parent.vars.contains_key(name) {
-                        warn!("tried to update read only variable from parent scope")
+                    match parent {
+                        ParentScope::Mut(parent) => {
+                            if let Some(var) = parent.borrow_mut().vars.get_mut(name) {
+                                *var.get_mut() = var_value;
+                                Ok(())
+                            } else {
+                                Err(DoesNotExist)
+                            }
+                        }
+                        ParentScope::Normal(parent) => {
+                            if parent.vars.contains_key(name) {
+                                warn!("tried to update read only variable from parent scope")
+                            }
+                            Err(DoesNotExist)
+                        }
                     }
+                } else {
+                    Err(DoesNotExist)
                 }
-                Err(DoesNotExist)
+
             }
         }
     }
@@ -480,24 +525,47 @@ impl Scope {
         Ok(())
     }
 
-    pub fn get_var_mut(&mut self, name: &str) -> Option<&mut Variable> {
-        self.vars.get_mut(name).or_else(|| match &mut self.parent_scope {
-            Some(scope) => scope.get_var_mut(name),
-            None => None,
-        })
+    pub fn with_var_mut<T>(
+        &mut self,
+        name: &str,
+        closure: impl FnOnce(&mut Variable) -> T,
+    ) -> Option<T> {
+        match self.vars.get_mut(name) {
+            Some(v) => Some(closure(v)),
+            None => {
+                if let Some(parent) = &mut self.parent_scope {
+                    parent.with_var_mut(name, closure)
+                } else {
+                    None
+                }
+            }
+        }
+
     }
-    pub fn get_var(&self,name: &str)->Option<&Variable>{
-        self.vars.get(name).or_else(|| match &self.parent_scope {
-            Some(scope) => scope.get_var(name),
-            None => None,
-        })
+    pub fn with_var<T>(&self, name: &str, closure: impl FnOnce(&Variable) -> T) -> Option<T> {
+        match self.vars.get(name) {
+            Some(v) => Some(closure(v)),
+            None => {
+                if let Some(parent) = &self.parent_scope {
+                    parent.with_var(name, closure)
+                } else {
+                    None
+                }
+            }
+        }
     }
 
-    pub fn get_function(&self, name: &str) -> Option<&Function> {
-        self.functions.get(name).or(match &self.parent_scope {
-            Some(s) => s.get_function(name),
-            None => None,
-        })
+    pub fn with_function<T>(&self, name: &str, closure: impl FnOnce(&Function) -> T) -> Option<T> {
+        match self.functions.get(name) {
+            Some(v) => Some(closure(v)),
+            None => {
+                if let Some(parent) = &self.parent_scope {
+                    parent.with_function(name, closure)
+                } else {
+                    None
+                }
+            }
+        }
     }
     pub fn add_class(&mut self, class: Class) -> Result<(), AlreadyExists> {
         if self.classes.contains_key(&class.name) {
@@ -523,13 +591,13 @@ pub struct AlreadyExists;
 #[derive(Debug)]
 pub struct DoesNotExist;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Variable {
     value: Value,
 }
 impl Variable {
     pub fn new(value: Value) -> Self {
-        Self { value: value }
+        Self { value }
     }
     pub fn get(&self) -> &Value {
         &self.value
@@ -553,6 +621,12 @@ impl Class {
         }
     }
 }
+impl PartialEq for Class {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ClassInstance {
     class: Rc<Class>,
@@ -560,20 +634,34 @@ pub struct ClassInstance {
 }
 impl ClassInstance {
     pub fn call_method(
-        &self,
+        &mut self,
         name: &str,
         args: Vec<Value>,
-        mut scope: Scope,
     ) -> Result<Option<Value>, DoesNotExist> {
         let Some(method) = self.class.methods.get(name) else {
             return Err(DoesNotExist);
         };
-        scope.vars.extend(self.fields.clone().into_iter());
-
-        Ok(method.call(args, scope))
-        // return Ok(None);
+        let scope = Rc::new(RefCell::new(Scope::new()));
+        scope.borrow_mut().vars = self.fields.clone();
+        let scope = Scope::with_mutable_parent(scope);
+        let result = method.call(args, scope.clone());
+        match scope.parent_scope {
+            Some(p) => match p {
+                ParentScope::Mut(m) => self.fields = m.take().vars,
+                ParentScope::Normal(_) => panic!("parent was set to mut"),
+            },
+            None => panic!("we set a parent"),
+        };
+        Ok(result)
     }
 }
+
+impl PartialEq for ClassInstance {
+    fn eq(&self, other: &Self) -> bool {
+        self.class == other.class && map_equal(&self.fields, &other.fields)
+    }
+}
+
 impl Display for ClassInstance {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut fields = String::new();
@@ -589,6 +677,11 @@ impl Display for ClassInstance {
     }
 }
 
+fn map_equal<K: Eq + Hash, V: PartialEq>(one: &HashMap<K, V>, two: &HashMap<K, V>) -> bool {
+    one.iter()
+        .all(|(k, v)| two.get(k).filter(|v2| *v2 == v).is_some())
+}
+
 #[cfg(test)]
 #[path = "tests/runtime.rs"]
-mod runtime;
+mod test;

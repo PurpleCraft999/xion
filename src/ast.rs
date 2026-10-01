@@ -46,10 +46,6 @@ impl AstBuilder {
 
         let fields = self.parse_list(LeftBrace, RightBrace, SemiColon)?;
 
-        // if !fields.clone().iter().all(|n|matches!(n,Node::VarDeclare(_))){
-        //     error!("Unexpected item in class body");
-        //     return None;
-        // }
 
         Some(Node::ClassDeclare(ClassAst {
             name: class_name,
@@ -132,7 +128,6 @@ impl AstBuilder {
         let mut args = Vec::new();
         if !self.consume_if(|t| t == &start) {
             warn!("List does not start with token: {start:?}");
-            // return None;
         }
         while let Some(token) = self.next() {
             debug!("token = {token:?}, end token = {end:?}");
@@ -261,29 +256,9 @@ impl AstBuilder {
         while let Some(token) = self.peek() {
             let node = match token {
                 Class => self.parse_class(),
-                // Name(_) => {
-                //     let token = self.next().expect("peeking has shown we have a next token moreover we are in a match arm of said token");
-                //     self.parse_expr(token, &SemiColon)
-                //     // let name = self
-                //     //     .next_if_name()
-                //     //     .expect("we are matching the name branch of the node");
-                //     // self.parse_name(name)
-                // }
-                //never meant to be read here
-                //whitespace cant be in at this point
-                // WhiteSpace | Colon | SemiColon | Comma | LeftBrace | RightBrace | Equals
-                // | LeftParen | RightParen | Return | Plus | Minus | Asterisk | Division
-                // | LeftBracket | RightBracket | True | False => {
-                //     warn!("unexpected lang syntax {:?}", token);
-                //     self.next();
-                //     None
-                // }
+
                 Let => self.parse_var(),
-                // StringLiteral(_) | NumberLiteral(_) => {
-                //     error!("literal in main ast branch");
-                //     self.next();
-                //     None
-                // }
+
                 Fn => self.parse_function(),
 
                 EOF => break,
@@ -381,7 +356,7 @@ pub struct FunctionDefAst {
     pub paramaters: Vec<String>,
     pub body: Vec<Node>,
 }
-
+///based on https://github.com/jdvillal/parser
 mod pratt_parser {
     use log::{debug, error, warn};
 
@@ -392,11 +367,8 @@ mod pratt_parser {
 
     fn infix_binding_power(op: &MathSign) -> (u8, u8) {
         match op {
-            // '=' => (0.2, 0.1),
             MathSign::Plus | MathSign::Minus => (1, 2),
             MathSign::Multiply | MathSign::Division => (3, 4),
-            // '^' | '√' => (3.1, 3.0),
-            // '.' => (4.0, 4.1),
         }
     }
 
@@ -434,7 +406,6 @@ mod pratt_parser {
                 && peek == Some(et)
             {
                 debug!("hit end token");
-                // lexer.next();
                 break;
             }
 
@@ -447,10 +418,6 @@ mod pratt_parser {
                 Some(Token::Minus) => MathSign::Minus,
                 Some(Token::Asterisk) => MathSign::Multiply,
                 Some(Token::Division) => MathSign::Division,
-                // end if end == end_token =>{
-                //     debug!("hit end token ");
-                //     break;
-                // },
                 Some(t) => {
                     warn!("unexpeced operator: {:?}", t);
                     return Some(lhs);
@@ -475,4 +442,4 @@ mod pratt_parser {
 }
 #[cfg(test)]
 #[path = "tests/ast.rs"]
-mod ast;
+mod test;

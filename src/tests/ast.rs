@@ -164,9 +164,56 @@ fn class_delcaration_with_variable() {
 }
 //just an empty function call without value
 #[test]
-fn class_constructor_with_value(){
-    let ast = ast(vec![Name("Class"),LeftParen,Name("x"),Colon,Token::NumberLiteral(50),RightParen,SemiColon]);
-    assert_eq!(vec![FnCall(FnCallAst { name: "Class".to_string(), args: vec![VarReasign { name: "x".to_string(), new_value: Box::new(Node::NumberLiteral(50)) }] })],ast);
+fn class_constructor_with_value() {
+    let ast = ast(vec![
+        Name("Class"),
+        LeftParen,
+        Name("x"),
+        Colon,
+        Token::NumberLiteral(50),
+        RightParen,
+        SemiColon,
+    ]);
+    assert_eq!(
+        vec![FnCall(FnCallAst {
+            name: "Class".to_string(),
+            args: vec![VarReasign {
+                name: "x".to_string(),
+                new_value: Box::new(Node::NumberLiteral(50))
+            }]
+        })],
+        ast
+    );
+}
+#[test]
+fn class_field_access() {
+    let ast = ast(vec![Name("point"), Dot, Name("x"), SemiColon]);
+    assert_eq!(
+        vec![FieldAccess {
+            var_name: "point".to_string(),
+            field_name: "x".to_string()
+        }],
+        ast
+    )
+}
 
-
+#[test]
+fn class_method_call() {
+    let ast = ast(vec![
+        Name("point"),
+        Dot,
+        Name("moveX"),
+        LeftParen,
+        Token::NumberLiteral(50),
+        RightParen,
+        SemiColon,
+    ]);
+    assert_eq!(
+        vec![MethodCall {
+            var_name: "point".to_string(),
+            method_name: "moveX".to_string(),
+            args: vec![Node::NumberLiteral(50)]
+        }],
+        ast
+    )
 }

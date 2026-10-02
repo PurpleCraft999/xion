@@ -72,7 +72,7 @@ impl AstBuilder {
         Option<&'expr Token>: From<&'expr E>,
     {
         let node = match token {
-            NumberLiteral(_) | Name(_) | StringLiteral(_) | LeftParen => {
+            NumberLiteral(_) | Name(_) | StringLiteral(_) | LeftParen|Minus => {
                 pratt_parser::parse_expression(self, 0, token, end_token.into())
             }
             Return => {
@@ -85,14 +85,14 @@ impl AstBuilder {
 
                 Some(Node::Return(return_value))
             }
-            Minus => match self.peek() {
-                Some(NumberLiteral(num)) => {
-                    let num = -*num;
-                    self.next();
-                    Some(Node::NumberLiteral(num))
-                }
-                _ => None,
-            },
+            // Minus => match self.peek() {
+            //     Some(NumberLiteral(num)) => {
+            //         let num = -*num;
+            //         self.next();
+            //         Some(Node::NumberLiteral(num))
+            //     }
+            //     _ => None,
+            // },
             LeftBracket => self.parse_array(),
             Let => self.parse_var(),
             Fn => self.parse_function(),
@@ -394,6 +394,16 @@ mod pratt_parser {
             }
             Token::NumberLiteral(num) => super::Node::NumberLiteral(num),
             Token::StringLiteral(string) => super::Node::StringLiteral(string),
+            Token::Minus=>{
+                match lexer.peek() {
+                Some(Token::NumberLiteral(num)) => {
+                    let num = -*num;
+                    lexer.next();
+                    super::Node::NumberLiteral(num)
+                }
+                _ => return None,
+            }
+            }
             t => {
                 error!("bad token: {:?}", t);
                 return None;

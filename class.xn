@@ -14,6 +14,6 @@ let point = Point(x:50);
 
 #let hello = "hello";
 
-let s = point.move(63,344);
+point.move(63,344);
 print(point);
 print(x);

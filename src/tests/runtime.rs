@@ -1,6 +1,26 @@
 use super::*;
 use crate::ast::VarAst;
 
+fn run(nodes:Vec<Node>)->(RuntimeReturn,Runtime){
+    crate::test_log::init_logger();
+    let mut run = Runtime::start(nodes);
+    let err = run.run();
+    if let Err(err) = err{
+        panic!("{err}")
+    } 
+    (err,run)
+}
+macro_rules! run {
+    ($nodes:expr) => {
+        run($nodes).0
+    };
+    ($nodes:expr ; Runtime)=>{
+        run($nodes).1
+    }
+}
+
+
+
 #[test]
 fn test_number_and_string_literals() {
     let nodes = vec![
@@ -8,9 +28,8 @@ fn test_number_and_string_literals() {
         Node::StringLiteral("hello xion".to_string()),
     ];
 
-    let mut runtime = Runtime::start(nodes);
-    let result = runtime.run();
-    assert_eq!(result, None);
+    let result = run!(nodes);
+    assert_eq!(result, Ok(None));
 }
 
 #[test]
@@ -26,8 +45,7 @@ fn test_variable_declaration_and_reference() {
         })),
     ];
 
-    let mut runtime = Runtime::start(nodes);
-    runtime.run();
+    let runtime = run!(nodes;Runtime);
 
     let scope = runtime.get_current_scope();
     assert!(
@@ -53,8 +71,9 @@ fn test_variable_reassignment() {
         },
     ];
 
-    let mut runtime = Runtime::start(nodes);
-    runtime.run();
+    // let mut runtime = Runtime::start(nodes);
+    // runtime.run();
+    let runtime = run!(nodes;Runtime);
 
     let scope = runtime.get_current_scope();
     assert!(
@@ -90,8 +109,7 @@ fn test_math_operations() {
         },
     }))];
 
-    let mut runtime = Runtime::start(nodes);
-    runtime.run();
+    let runtime = run!(nodes;Runtime);
 
     let scope = runtime.get_current_scope();
 
@@ -112,10 +130,9 @@ fn test_return_statement() {
         Node::Return(Some(Box::new(Node::NumberLiteral(100)))),
     ];
 
-    let mut runtime = Runtime::start(nodes);
-    let return_val = runtime.run();
+    let return_val = run!(nodes);
 
-    assert_eq!(return_val, Some(Value::Number(99)));
+    assert_eq!(return_val, Ok(Some(Value::Number(99))));
 }
 
 #[test]
@@ -129,8 +146,7 @@ fn test_array_literal_evaluation() {
         ]),
     }))];
 
-    let mut runtime = Runtime::start(nodes);
-    runtime.run();
+    let runtime = run!(nodes;Runtime);
 
     let scope = runtime.get_current_scope();
     assert!(

@@ -9,10 +9,10 @@ pub enum Function {
     Native(NativeFunction),
 }
 impl Function {
-    pub fn call(&self, args: Vec<Value>, scope: Scope) -> Option<Value> {
+    pub fn call(&self, args: Vec<Value>, scope: Scope) -> crate::runtime::RuntimeReturn {
         match self {
             Self::NonNative(f) => f.call(args, scope),
-            Self::Native(f) => (f.func)(args),
+            Self::Native(f) => Ok((f.func)(args)),
         }
     }
 }
@@ -43,7 +43,7 @@ impl NonNativeFunction {
         &self.name
     }
 
-    fn call(&self, args: Vec<Value>, scope: Scope) -> Option<Value> {
+    fn call(&self, args: Vec<Value>, scope: Scope) -> crate::runtime::RuntimeReturn {
         let mut runtime = Runtime::with_scope_and_nodes(self.body.clone(), scope);
         for (name, value) in self.params.iter().zip(args) {
             let name = name.to_owned();

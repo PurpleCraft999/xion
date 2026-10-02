@@ -1,7 +1,7 @@
 use xion::{ast::AstBuilder, runtime::Runtime, token::Lexer};
 
 fn main() {
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Trace);
     log::set_boxed_logger(Box::new(simple_logger::SimpleLogger::new()))
         .expect("only returns error when the logger is already set");
 
@@ -13,5 +13,5 @@ fn main() {
     let ast = AstBuilder::new(lexed);
     let nodes = ast.build();
 
-    Runtime::start(nodes).run();
+    let _ = Runtime::start(nodes).run();
 }

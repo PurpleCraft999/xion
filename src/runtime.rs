@@ -13,7 +13,7 @@ use crate::runtime::MathError::{InvalidTypeLeft, InvalidTypeRight};
 use crate::runtime::RuntimeError::DoesNotExist;
 use crate::xion_std;
 
-pub type RuntimeReturn = Result<Option<Value>,RuntimeError>;
+pub type RuntimeReturn = Result<Option<Value>, RuntimeError>;
 
 #[derive(Debug, Clone)]
 pub struct Runtime {
@@ -43,69 +43,47 @@ impl Runtime {
         &self.current_scope
     }
 
-    fn eval(&mut self, node: Node) -> RuntimeReturn{
+    fn eval(&mut self, node: Node) -> RuntimeReturn {
         match node {
             VarDeclare(var_ast) => {
-                let value = self.eval(var_ast.value)?.ok_or(RuntimeError::RequireValue)?;
-                    self
-                        .get_current_scope_mut()
-                        .add_var(var_ast.name.clone(), Variable::new(value))?;
-                    Ok(None)
-                        
-                    
-               
+                let value = self
+                    .eval(var_ast.value)?
+                    .ok_or(RuntimeError::RequireValue)?;
+                self.get_current_scope_mut()
+                    .add_var(var_ast.name.clone(), Variable::new(value))?;
+                Ok(None)
             }
             StringLiteral(str) => Ok(Some(Value::String(str))),
-            VarRef(var) => self.get_current_scope().with_var(&var, |v| v.get().clone()).ok_or(RuntimeError::DoesNotExist(format!("variable {var}"))).map(Some),
+            VarRef(var) => self
+                .get_current_scope()
+                .with_var(&var, |v| v.get().clone())
+                .ok_or(RuntimeError::DoesNotExist(format!(
+                    "cannot get variable {var}"
+                )))
+                .map(Some),
 
             VarReasign { name, new_value } => {
                 let var = self.eval(*new_value)?.ok_or(RuntimeError::RequireValue)?;
 
                 if self.get_current_scope_mut().update_var(&name, var).is_err() {
-                    Err(RuntimeError::DoesNotExist(format!("cannot reassign variable {name}")))
-                } else{
+                    Err(RuntimeError::DoesNotExist(format!(
+                        "cannot reassign variable {name}"
+                    )))
+                } else {
                     Ok(None)
                 }
-                
             }
             NumberLiteral(num) => Ok(Some(Value::Number(num))),
-            ClassDeclare(class) => {
-                //TODO: In the future this scope should be only globals,consts, and the like and not completly empty
-                let mut runtime = Runtime::with_scope_and_nodes(class.fields, Scope::new());
-                runtime.run()?;
 
-                let runtime_class = Class {
-                    name: class.name.clone(),
-                    fields: runtime.current_scope.vars,
-                    methods: runtime.current_scope.functions,
-                };
-                self
-                    .get_current_scope_mut()
-                    .add_class(runtime_class)?;
-                    
-                self.get_current_scope_mut()
-                    .add_native_fn(&class.name, xion_std::instantiate);
-                Ok(None)
-            }
-            FnDeclare(func) => {
-                self
-                    .get_current_scope_mut()
-                    .add_func(NonNativeFunction::new(
-                        func.name.clone(),
-                        func.paramaters,
-                        func.body,
-                    ))?;
-                Ok(None)
-                
-
-            }
             FnCall(func_ast) => {
-
                 let Some(func) = self
                     .get_current_scope()
                     .with_function(&func_ast.name, |func| func.clone())
                 else {
-                    return Err(DoesNotExist(format!("cannot call function {}",func_ast.name)));
+                    return Err(DoesNotExist(format!(
+                        "cannot call function {}",
+                        func_ast.name
+                    )));
                 };
 
                 //class constructor
@@ -145,8 +123,12 @@ impl Runtime {
                 Ok(None)
             }
             Math { left, op, right } => {
-                let left = self.eval(*left)?.ok_or(RuntimeError::MathError(MathError::InvalidTypeLeft))?;
-                let right = self.eval(*right)?.ok_or(RuntimeError::MathError(MathError::InvalidTypeRight))?;
+                let left = self
+                    .eval(*left)?
+                    .ok_or(RuntimeError::MathError(MathError::InvalidTypeLeft))?;
+                let right = self
+                    .eval(*right)?
+                    .ok_or(RuntimeError::MathError(MathError::InvalidTypeRight))?;
                 // if let Some(left) = left
                 //     && let Some(right) = right
                 {
@@ -156,11 +138,15 @@ impl Runtime {
                         MathSign::Multiply => left.mul(&right),
                         MathSign::Division => left.div(&right),
                     };
-                    value.map(|value|Some(value)).map_err(|e|RuntimeError::MathError(e))
+                    value
+                        .map(Some)
+                        .map_err(RuntimeError::MathError)
                 }
             }
             ArrayLiteral(vec) => Ok(Some(Value::Array(
-                vec.into_iter().map_while(|n| self.eval(n).ok().flatten()).collect(),
+                vec.into_iter()
+                    .map_while(|n| self.eval(n).ok().flatten())
+                    .collect(),
             ))),
             MethodCall {
                 var_name,
@@ -169,35 +155,33 @@ impl Runtime {
             } => {
                 let args = self.eval_list(args);
 
-                let s =self.get_current_scope_mut().with_var_mut(&var_name, |var|{
-
-                 match var.get_mut() {
-                    Value::Object(obj) => {
-
-
-                        obj.call_method(&method_name, args)
+                let s = self.get_current_scope_mut().with_var_mut(&var_name, |var| {
+                    match var.get_mut() {
+                        Value::Object(obj) => obj.call_method(&method_name, args),
+                        o => Err(RuntimeError::TypeError {
+                            actual_value: o.value_type(),
+                            expected_value: ValueType::Object,
+                        }),
                     }
-                    o => Err(RuntimeError::TypeError { actual_value:o.value_type() , expected_value: ValueType::Object }),
-                }});
+                });
                 match s {
                     Some(v) => v,
-                    None => {
-                        Err(RuntimeError::DoesNotExist(format!("cannot invoke method {} on var {1} because var {1}",method_name,var_name)))
-                    }
+                    None => Err(RuntimeError::DoesNotExist(format!(
+                        "cannot invoke method {} on var {1} because var {1}",
+                        method_name, var_name
+                    ))),
                 }
             }
             FieldAccess {
                 var_name,
                 field_name,
-            } => {
-
-                Ok(self.get_current_scope()
+            } => Ok(self
+                .get_current_scope()
                 .with_var(&var_name, |var| match &var.get() {
-                    Value::Object(obj) => obj.fields.get(&field_name).map(|v|v.get().clone()),
+                    Value::Object(obj) => obj.fields.get(&field_name).map(|v| v.get().clone()),
                     _ => None,
                 })
-                .flatten())
-            }
+                .flatten()),
             FieldReasign {
                 var_name,
                 field_name,
@@ -205,19 +189,51 @@ impl Runtime {
             } => {
                 let new_value = self.eval(*new_value)?.ok_or(RuntimeError::RequireValue)?;
 
-                Ok(self.get_current_scope_mut()
-                .with_var_mut(&var_name, |var| match var.get_mut() {
-                    Value::Object(obj) => match obj.fields.get_mut(&field_name) {
-                        Some(v) => {
-                            v.value = new_value;
-                            None
-                        }
-                        None => None,
-                    },
-                    _ => None,
-                })
-                .flatten())
+                Ok(self
+                    .get_current_scope_mut()
+                    .with_var_mut(&var_name, |var| match var.get_mut() {
+                        Value::Object(obj) => match obj.fields.get_mut(&field_name) {
+                            Some(v) => {
+                                v.value = new_value;
+                                None
+                            }
+                            None => None,
+                        },
+                        _ => None,
+                    })
+                    .flatten())
             }
+            ClassDeclare(_) | FnDeclare(_) => Ok(None),
+        }
+    }
+    fn early_eval(&mut self, node: Node) -> RuntimeReturn {
+        match node {
+            ClassDeclare(class) => {
+                //TODO: In the future this scope should be only globals,consts, and the like and not completly empty
+                let mut runtime = Runtime::with_scope_and_nodes(class.fields, Scope::new());
+                runtime.run()?;
+
+                let runtime_class = Class {
+                    name: class.name.clone(),
+                    fields: runtime.current_scope.vars,
+                    methods: runtime.current_scope.functions,
+                };
+                self.get_current_scope_mut().add_class(runtime_class)?;
+
+                self.get_current_scope_mut()
+                    .add_native_fn(&class.name, xion_std::instantiate);
+                Ok(None)
+            }
+            FnDeclare(func) => {
+                self.get_current_scope_mut()
+                    .add_func(NonNativeFunction::new(
+                        func.name.clone(),
+                        func.paramaters,
+                        func.body,
+                    ))?;
+                Ok(None)
+            }
+            _ => Ok(None),
         }
     }
     ///makes a child scope
@@ -235,13 +251,27 @@ impl Runtime {
         }
         arguments
     }
+    ///parses functions and classes
+    fn parse_ahead(&mut self) -> RuntimeReturn {
+        for node in self
+            .nodes
+            .clone()
+            .into_iter()
+            .filter(|n| matches!(n, FnDeclare(_) | ClassDeclare(_)))
+        {
+            self.early_eval(node)
+                .map_err(|e| RuntimeError::Other(format!("error during early eval {e}")))?;
+        }
+        Ok(None)
+    }
 
     pub fn run(&mut self) -> RuntimeReturn {
+        self.parse_ahead()?;
         let nodes = std::mem::take(&mut self.nodes);
         for node in nodes {
-            if let Err(err) = self.eval(node){
+            if let Err(err) = self.eval(node) {
                 error!("{err}");
-                return Err(err)
+                return Err(err);
             }
             if self.return_value.is_some() {
                 break;
@@ -338,28 +368,24 @@ impl Value {
             ),
         }
     }
-    fn value_type(&self)->ValueType{
-        match self{
-            Self::Array(_)=>ValueType::Array,
-            Self::Bool(_)=>ValueType::Bool,
-            Self::Number(_)=>ValueType::Int,
-            Self::Object(_)=>ValueType::Object,
-            Self::String(_)=>ValueType::String,
+    fn value_type(&self) -> ValueType {
+        match self {
+            Self::Array(_) => ValueType::Array,
+            Self::Bool(_) => ValueType::Bool,
+            Self::Number(_) => ValueType::Int,
+            Self::Object(_) => ValueType::Object,
+            Self::String(_) => ValueType::String,
         }
     }
 }
-#[derive(Debug,Clone, Copy,PartialEq, Eq)]
-pub enum ValueType{
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ValueType {
     Array,
     Bool,
     Int,
     Object,
-    String
+    String,
 }
-
-
-
-
 
 fn vec_to_string<T: ToString>(vec: &Vec<T>) -> String {
     if vec.is_empty() {
@@ -400,7 +426,7 @@ impl std::fmt::Display for Value {
     }
 }
 
-#[derive(Debug, Clone,PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum MathError {
     InvalidTypeLeft,
     InvalidTypeRight,
@@ -474,7 +500,9 @@ impl Scope {
 
     pub fn add_var(&mut self, name: String, var: Variable) -> Result<(), RuntimeError> {
         if self.vars.contains_key(&name) {
-            return Err(RuntimeError::AlreadyExists(format!("variable {name}")));
+            return Err(RuntimeError::AlreadyExists(format!(
+                "cannot create variable {name}"
+            )));
         }
 
         self.vars.insert(name, var);
@@ -508,14 +536,16 @@ impl Scope {
                 } else {
                     Err(RuntimeError::DoesNotExist(name.to_owned()))
                 }
-
             }
         }
     }
 
     fn add_func(&mut self, func: NonNativeFunction) -> Result<(), RuntimeError> {
         if self.functions.contains_key(func.name()) {
-            return Err(RuntimeError::AlreadyExists(format!("funtion {}",func.name())));
+            return Err(RuntimeError::AlreadyExists(format!(
+                "funtion {}",
+                func.name()
+            )));
         }
 
         self.functions
@@ -538,7 +568,6 @@ impl Scope {
                 }
             }
         }
-
     }
     pub fn with_var<T>(&self, name: &str, closure: impl FnOnce(&Variable) -> T) -> Option<T> {
         match self.vars.get(name) {
@@ -567,7 +596,7 @@ impl Scope {
     }
     pub fn add_class(&mut self, class: Class) -> Result<(), RuntimeError> {
         if self.classes.contains_key(&class.name) {
-            return Err(RuntimeError::AlreadyExists(format!("class {}",class.name)));
+            return Err(RuntimeError::AlreadyExists(format!("class {}", class.name)));
         }
 
         self.classes.insert(class.name.clone(), Rc::new(class));
@@ -583,7 +612,6 @@ impl Scope {
             })
     }
 }
-
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Variable {
@@ -627,11 +655,7 @@ pub struct ClassInstance {
     fields: HashMap<String, Variable>,
 }
 impl ClassInstance {
-    pub fn call_method(
-        &mut self,
-        name: &str,
-        args: Vec<Value>,
-    ) -> RuntimeReturn {
+    pub fn call_method(&mut self, name: &str, args: Vec<Value>) -> RuntimeReturn {
         let Some(method) = self.class.methods.get(name) else {
             return Err(RuntimeError::DoesNotExist(name.to_owned()));
         };
@@ -676,38 +700,41 @@ fn map_equal<K: Eq + Hash, V: PartialEq>(one: &HashMap<K, V>, two: &HashMap<K, V
         .all(|(k, v)| two.get(k).filter(|v2| *v2 == v).is_some())
 }
 
-#[derive(Debug,PartialEq)]
-pub enum RuntimeError{
+#[derive(Debug, PartialEq)]
+pub enum RuntimeError {
     DoesNotExist(String),
     AlreadyExists(String),
     RequireValue,
     MathError(MathError),
     Other(String),
-    TypeError{
-        actual_value:ValueType,
-        expected_value:ValueType,
+    TypeError {
+        actual_value: ValueType,
+        expected_value: ValueType,
     },
 }
 
-
-
-
-
-impl Display for RuntimeError{
+impl Display for RuntimeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self{
-            RuntimeError::DoesNotExist(value)=>write!(f,"{value} does not exist"),
-            RuntimeError::AlreadyExists(value)=>write!(f,"{value} already exists"),
-            RuntimeError::RequireValue => write!(f,"a value was required but eval was None"),
-            RuntimeError::MathError(err)=>write!(f,"while conducting a math equasion this error oqured {err:?}"),
-            RuntimeError::Other(o)=>write!(f,"{o}"),
-            RuntimeError::TypeError{actual_value,expected_value}=>write!(f,"a value of type {:?} was expected but a value of {:?} was found instead",actual_value,expected_value)
+        match self {
+            RuntimeError::DoesNotExist(value) => write!(f, "{value} does not exist"),
+            RuntimeError::AlreadyExists(value) => write!(f, "{value} already exists"),
+            RuntimeError::RequireValue => write!(f, "a value was required but eval was None"),
+            RuntimeError::MathError(err) => write!(
+                f,
+                "while conducting a math equasion this error oqured {err:?}"
+            ),
+            RuntimeError::Other(o) => write!(f, "{o}"),
+            RuntimeError::TypeError {
+                actual_value,
+                expected_value,
+            } => write!(
+                f,
+                "a value of type {:?} was expected but a value of {:?} was found instead",
+                actual_value, expected_value
+            ),
         }
     }
 }
-
-
-
 
 #[cfg(test)]
 #[path = "tests/runtime.rs"]

@@ -1,19 +1,30 @@
+
+let point = Point(x:50);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class Point{
     let x = 0;
     let y = 0;
     fn move(newX,newY){
         x=newX;
         y=newY;
-        return hello;
     }
 }
 
 
 
-let point = Point(x:50);
-
-#let hello = "hello";
-
-point.move(63,344);
-print(point);
-print(x);

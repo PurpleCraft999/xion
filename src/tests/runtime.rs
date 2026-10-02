@@ -1,25 +1,23 @@
 use super::*;
 use crate::ast::VarAst;
 
-fn run(nodes:Vec<Node>)->(RuntimeReturn,Runtime){
+fn run(nodes: Vec<Node>) -> (RuntimeReturn, Runtime) {
     crate::test_log::init_logger();
     let mut run = Runtime::start(nodes);
     let err = run.run();
-    if let Err(err) = err{
+    if let Err(err) = err {
         panic!("{err}")
-    } 
-    (err,run)
+    }
+    (err, run)
 }
 macro_rules! run {
     ($nodes:expr) => {
         run($nodes).0
     };
-    ($nodes:expr ; Runtime)=>{
+    ($nodes:expr ; Runtime) => {
         run($nodes).1
-    }
+    };
 }
-
-
 
 #[test]
 fn test_number_and_string_literals() {

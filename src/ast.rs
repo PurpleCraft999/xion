@@ -46,7 +46,6 @@ impl AstBuilder {
 
         let fields = self.parse_list(LeftBrace, RightBrace, SemiColon)?;
 
-
         Some(Node::ClassDeclare(ClassAst {
             name: class_name,
             fields,

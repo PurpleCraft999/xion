@@ -1,0 +1,12 @@
+[package]
+name = "xion_interpreter_proc_macros"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+quote = "1.0.47"
+syn = "3.0.6"
+
+
+[lib]
+proc-macro=true

@@ -1,5 +1,4 @@
 use crate::runtime::Value;
-
 type Input = Vec<Value>;
 type Output = Option<Value>;
 
@@ -33,3 +32,10 @@ pub fn instantiate(_: Input) -> Output {
     log::error!("instantiate was called directly");
     None
 }
+
+// use crate::runtime::Variable;
+// #[derive(xion_interpreter_proc_macros::MakeClass)]
+// struct Name{
+//     name:String
+// }
+

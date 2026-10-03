@@ -1,8 +1,8 @@
-[package]
-name = "xion"
-version = "0.1.0"
-edition = "2024"
+[workspace]
+members=["xion_interpreter", "xion_interpreter_proc_macros"]
+resolver="3"
 
-[dependencies]
+[workspace.dependencies]
 log = "0.4.34"
 simple_logger = "5.2.0"
+

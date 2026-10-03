@@ -2,6 +2,7 @@ pub mod ast;
 pub mod functions;
 pub mod runtime;
 pub mod token;
+pub mod class;
 mod xion_std;
 
 #[cfg(test)]

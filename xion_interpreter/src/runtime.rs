@@ -1,13 +1,13 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
-use std::hash::Hash;
 use std::rc::Rc;
 
 use log::{debug, error, warn};
 
 use crate::ast::Node::*;
 use crate::ast::{MathSign, Node};
+use crate::class::{ClassInstance, RuntimeClass};
 use crate::functions::{Function, NativeFunction, NativeFunctionHeader, NonNativeFunction};
 use crate::runtime::MathError::{InvalidTypeLeft, InvalidTypeRight};
 use crate::runtime::RuntimeError::DoesNotExist;
@@ -138,9 +138,7 @@ impl Runtime {
                         MathSign::Multiply => left.mul(&right),
                         MathSign::Division => left.div(&right),
                     };
-                    value
-                        .map(Some)
-                        .map_err(RuntimeError::MathError)
+                    value.map(Some).map_err(RuntimeError::MathError)
                 }
             }
             ArrayLiteral(vec) => Ok(Some(Value::Array(
@@ -213,7 +211,7 @@ impl Runtime {
                 let mut runtime = Runtime::with_scope_and_nodes(class.fields, Scope::new());
                 runtime.run()?;
 
-                let runtime_class = Class {
+                let runtime_class = RuntimeClass {
                     name: class.name.clone(),
                     fields: runtime.current_scope.vars,
                     methods: runtime.current_scope.functions,
@@ -378,6 +376,12 @@ impl Value {
         }
     }
 }
+impl From<String> for Value {
+    fn from(value: String) -> Self {
+        Value::String(value)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ValueType {
     Array,
@@ -434,7 +438,7 @@ pub enum MathError {
     DivisionByZero,
 }
 #[derive(Debug, Clone)]
-enum ParentScope {
+pub enum ParentScope {
     Normal(Box<Scope>),
     Mut(Rc<std::cell::RefCell<Scope>>),
 }
@@ -457,7 +461,7 @@ impl ParentScope {
             ParentScope::Normal(p) => p.with_function(name, c),
         }
     }
-    fn get_class(&self, name: &str) -> Option<Rc<Class>> {
+    fn get_class(&self, name: &str) -> Option<Rc<RuntimeClass>> {
         match self {
             ParentScope::Mut(m) => m.borrow().get_class(name),
             ParentScope::Normal(p) => p.get_class(name),
@@ -467,10 +471,10 @@ impl ParentScope {
 
 #[derive(Debug, Clone, Default)]
 pub struct Scope {
-    parent_scope: Option<ParentScope>,
-    vars: HashMap<String, Variable>,
+    pub(crate) parent_scope: Option<ParentScope>,
+    pub(crate) vars: HashMap<String, Variable>,
     functions: HashMap<String, Function>,
-    classes: HashMap<String, Rc<Class>>,
+    classes: HashMap<String, Rc<RuntimeClass>>,
 }
 impl Scope {
     pub fn new() -> Self {
@@ -485,13 +489,13 @@ impl Scope {
             .insert(name.to_owned(), Function::Native(NativeFunction::new(func)));
     }
 
-    fn with_parent(scope: Scope) -> Self {
+    pub fn with_parent(scope: Scope) -> Self {
         Self {
             parent_scope: Some(ParentScope::Normal(Box::new(scope))),
             ..Default::default()
         }
     }
-    fn with_mutable_parent(scope: Rc<RefCell<Scope>>) -> Self {
+    pub fn with_mutable_parent(scope: Rc<RefCell<Scope>>) -> Self {
         Self {
             parent_scope: Some(ParentScope::Mut(scope)),
             ..Default::default()
@@ -594,15 +598,21 @@ impl Scope {
             }
         }
     }
-    pub fn add_class(&mut self, class: Class) -> Result<(), RuntimeError> {
-        if self.classes.contains_key(&class.name) {
-            return Err(RuntimeError::AlreadyExists(format!("class {}", class.name)));
+    pub fn add_class(&mut self, class: RuntimeClass) -> Result<(), RuntimeError> {
+        if self.classes.contains_key(class.name()) {
+            return Err(RuntimeError::AlreadyExists(format!(
+                "class {}",
+                class.name()
+            )));
         }
 
-        self.classes.insert(class.name.clone(), Rc::new(class));
+        self.classes.insert(class.name().to_owned(), Rc::new(class));
         Ok(())
     }
-    pub fn get_class(&self, name: &str) -> Option<Rc<Class>> {
+    // fn add_native_class<T:ToClass>(&mut self){
+    //     self.add_class(T::to_class()).expect("names should not overlap with native classes")
+    // }
+    pub fn get_class(&self, name: &str) -> Option<Rc<RuntimeClass>> {
         self.classes
             .get(name)
             .cloned()
@@ -627,77 +637,6 @@ impl Variable {
     pub fn get_mut(&mut self) -> &mut Value {
         &mut self.value
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct Class {
-    name: String,
-    fields: HashMap<String, Variable>,
-    methods: HashMap<String, Function>,
-}
-impl Class {
-    pub fn instantiate(self: &Rc<Self>) -> ClassInstance {
-        ClassInstance {
-            class: Rc::clone(self),
-            fields: self.fields.clone(),
-        }
-    }
-}
-impl PartialEq for Class {
-    fn eq(&self, other: &Self) -> bool {
-        self.name == other.name
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ClassInstance {
-    class: Rc<Class>,
-    fields: HashMap<String, Variable>,
-}
-impl ClassInstance {
-    pub fn call_method(&mut self, name: &str, args: Vec<Value>) -> RuntimeReturn {
-        let Some(method) = self.class.methods.get(name) else {
-            return Err(RuntimeError::DoesNotExist(name.to_owned()));
-        };
-        let scope = Rc::new(RefCell::new(Scope::new()));
-        scope.borrow_mut().vars = std::mem::take(&mut self.fields);
-        let scope = Scope::with_mutable_parent(scope);
-        let result = method.call(args, scope.clone());
-        match scope.parent_scope {
-            Some(p) => match p {
-                ParentScope::Mut(m) => self.fields = m.take().vars,
-                ParentScope::Normal(_) => panic!("parent was set to mut"),
-            },
-            None => panic!("we set a parent"),
-        };
-        result
-    }
-}
-
-impl PartialEq for ClassInstance {
-    fn eq(&self, other: &Self) -> bool {
-        self.class == other.class && map_equal(&self.fields, &other.fields)
-    }
-}
-
-impl Display for ClassInstance {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut fields = String::new();
-        for (name, var) in &self.fields {
-            fields += name;
-            fields.push('=');
-            fields += &var.get().to_string();
-            fields.push(',');
-        }
-        fields.pop();
-
-        write!(f, "{}Instance{{ fields:[{fields}] }}", self.class.name)
-    }
-}
-
-fn map_equal<K: Eq + Hash, V: PartialEq>(one: &HashMap<K, V>, two: &HashMap<K, V>) -> bool {
-    one.iter()
-        .all(|(k, v)| two.get(k).filter(|v2| *v2 == v).is_some())
 }
 
 #[derive(Debug, PartialEq)]

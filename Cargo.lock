@@ -165,9 +165,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "xion"
+name = "xion_interpreter"
 version = "0.1.0"
 dependencies = [
  "log",
  "simple_logger",
+ "xion_interpreter_proc_macros",
+]
+
+[[package]]
+name = "xion_interpreter_proc_macros"
+version = "0.1.0"
+dependencies = [
+ "quote",
+ "syn",
 ]

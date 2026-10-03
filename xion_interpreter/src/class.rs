@@ -45,7 +45,7 @@ impl PartialEq for RuntimeClass {
 #[derive(Debug, Clone)]
 pub struct ClassInstance {
     class: Rc<RuntimeClass>,
-    pub(crate) fields: HashMap<String, Variable>,
+    fields: HashMap<String, Variable>,
 }
 impl ClassInstance {
     pub fn call_method(&mut self, name: &str, args: Vec<Value>) -> RuntimeReturn {
@@ -64,6 +64,15 @@ impl ClassInstance {
             None => panic!("we set a parent"),
         };
         result
+    }
+    pub fn get_field(&self,name: &str)->Option<&Variable>{
+        self.fields.get(name)
+    }
+    pub fn get_field_mut(&mut self,name: &str)->Option<&mut Variable>{
+        self.fields.get_mut(name)
+    }
+    pub fn set_fields(&mut self,new:HashMap<String,Variable>){
+        self.fields=new;
     }
 }
 

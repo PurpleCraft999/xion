@@ -1,4 +1,4 @@
 let arr = [50,100,"hello",true];
-
+fn dunc(){}
 
 print(arr);

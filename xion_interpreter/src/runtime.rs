@@ -97,7 +97,7 @@ impl Runtime {
                             // should run any VarAssigns for the class
                             let mut runtime = Runtime::with_scope_and_nodes(func_ast.args, scope);
                             runtime.run()?;
-                            instance.fields = runtime.current_scope.vars;
+                            instance.set_fields(runtime.current_scope.vars);
 
                             return Ok(Some(Value::Object(instance)));
                         }
@@ -176,7 +176,7 @@ impl Runtime {
             } => Ok(self
                 .get_current_scope()
                 .with_var(&var_name, |var| match &var.get() {
-                    Value::Object(obj) => obj.fields.get(&field_name).map(|v| v.get().clone()),
+                    Value::Object(obj) => obj.get_field(&field_name).map(|v| v.get().clone()),
                     _ => None,
                 })
                 .flatten()),
@@ -190,7 +190,7 @@ impl Runtime {
                 Ok(self
                     .get_current_scope_mut()
                     .with_var_mut(&var_name, |var| match var.get_mut() {
-                        Value::Object(obj) => match obj.fields.get_mut(&field_name) {
+                        Value::Object(obj) => match obj.get_field_mut(&field_name) {
                             Some(v) => {
                                 v.value = new_value;
                                 None

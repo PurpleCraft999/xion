@@ -40,11 +40,12 @@ impl AstBuilder {
             error!("token sould be name");
             return None;
         };
-        if !self.consume_if(|t| matches!(t, LeftBrace)) {
-            error!("next token was not left brace")
+        if self.peek() != Some(&LeftBrace) {
+            error!("next token was not left brace");
+            return None;
         }
 
-        let fields = self.parse_list(LeftBrace, RightBrace, SemiColon)?;
+        let fields = self.parse_sequence_of_exprs(LeftBrace, RightBrace, SemiColon)?;
 
         Some(Node::ClassDeclare(ClassAst {
             name: class_name,
@@ -70,9 +71,9 @@ impl AstBuilder {
     where
         E: Into<Option<Token>>,
         Option<&'expr Token>: From<&'expr E>,
-    {
+    { 
         let node = match token {
-            NumberLiteral(_) | Name(_) | StringLiteral(_) | LeftParen|Minus => {
+            NumberLiteral(_) | Name(_) | StringLiteral(_) | LeftParen | Minus => {
                 pratt_parser::parse_expression(self, 0, token, end_token.into())
             }
             Return => {
@@ -85,14 +86,6 @@ impl AstBuilder {
 
                 Some(Node::Return(return_value))
             }
-            // Minus => match self.peek() {
-            //     Some(NumberLiteral(num)) => {
-            //         let num = -*num;
-            //         self.next();
-            //         Some(Node::NumberLiteral(num))
-            //     }
-            //     _ => None,
-            // },
             LeftBracket => self.parse_array(),
             Let => self.parse_var(),
             Fn => self.parse_function(),
@@ -123,7 +116,7 @@ impl AstBuilder {
         }
     }
 
-    fn parse_list(&mut self, start: Token, end: Token, sep: Token) -> Option<Vec<Node>> {
+    fn parse_sequence_of_exprs(&mut self, start: Token, end: Token, sep: Token) -> Option<Vec<Node>> {
         let mut args = Vec::new();
         if !self.consume_if(|t| t == &start) {
             warn!("List does not start with token: {start:?}");
@@ -149,10 +142,11 @@ impl AstBuilder {
     }
 
     fn parse_args(&mut self) -> Option<Vec<Node>> {
-        self.parse_list(LeftParen, RightParen, Comma)
+        self.parse_sequence_of_exprs(LeftParen, RightParen, Comma)
     }
     fn parse_array(&mut self) -> Option<Node> {
-        Some(Node::ArrayLiteral(self.parse_list(
+        
+        Some(Node::ArrayLiteral(self.parse_sequence_of_exprs(
             LeftBracket,
             RightBracket,
             Comma,
@@ -191,7 +185,7 @@ impl AstBuilder {
         }))
     }
     fn parse_scope(&mut self) -> Option<Vec<Node>> {
-        self.parse_list(LeftBrace, RightBrace, SemiColon)
+        self.parse_sequence_of_exprs(LeftBrace, RightBrace, SemiColon)
     }
     fn parse_name(&mut self, name: String) -> Option<Node> {
         let peeked = self.peek();
@@ -394,16 +388,14 @@ mod pratt_parser {
             }
             Token::NumberLiteral(num) => super::Node::NumberLiteral(num),
             Token::StringLiteral(string) => super::Node::StringLiteral(string),
-            Token::Minus=>{
-                match lexer.peek() {
+            Token::Minus => match lexer.peek() {
                 Some(Token::NumberLiteral(num)) => {
                     let num = -*num;
                     lexer.next();
                     super::Node::NumberLiteral(num)
                 }
                 _ => return None,
-            }
-            }
+            },
             t => {
                 error!("bad token: {:?}", t);
                 return None;
@@ -422,14 +414,16 @@ mod pratt_parser {
                 Some(Token::RightParen)
                 | None
                 | Some(Token::RightBracket)
-                | Some(Token::SemiColon) => break,
+                | Some(Token::SemiColon)
+                | Some(Token::Comma) => break,
                 Some(Token::Plus) => MathSign::Plus,
                 Some(Token::Minus) => MathSign::Minus,
                 Some(Token::Asterisk) => MathSign::Multiply,
                 Some(Token::Division) => MathSign::Division,
+
                 Some(t) => {
                     warn!("unexpeced operator: {:?}", t);
-                    return Some(lhs);
+                    break;
                 }
             };
             let (l_bp, r_bp) = infix_binding_power(&op);

@@ -2,7 +2,7 @@ use crate::runtime::Value;
 type Input = Vec<Value>;
 type Output = Option<Value>;
 
-pub fn print(values: Vec<Value>) -> Option<Value> {
+fn print(values: Vec<Value>) -> Option<Value> {
     if values.len() == 1 {
         println!("{}", values[0])
     } else if values.is_empty() {
@@ -19,7 +19,7 @@ pub fn print(values: Vec<Value>) -> Option<Value> {
     None
 }
 
-pub fn input(_: Vec<Value>) -> Option<Value> {
+fn input(_: Vec<Value>) -> Option<Value> {
     let mut out = String::new();
     match std::io::stdin().read_line(&mut out) {
         Ok(_) => (),
@@ -28,12 +28,8 @@ pub fn input(_: Vec<Value>) -> Option<Value> {
     Some(Value::String(out))
 }
 
-pub fn str(input: Input) -> Output {
-    if let Some(i) = input.get(0) {
-        Some(Value::String(i.to_string()))
-    } else {
-        None
-    }
+fn to_str(input: Input) -> Output {
+    input.first().map(|v|Value::String(v.to_string()))
 }
 
 pub fn instantiate(_: Input) -> Output {
@@ -41,11 +37,14 @@ pub fn instantiate(_: Input) -> Output {
     None
 }
 
-pub mod lib {
+
+pub use lib::{get_std_lib};
+
+mod lib {
     use super::*;
-    use std::{collections::HashMap, sync::OnceLock};
     use crate::runtime::RuntimeError;
     use crate::runtime::Scope;
+    use std::{collections::HashMap, sync::OnceLock};
     static DEFAULT_LIBS: OnceLock<HashMap<String, Scope>> = OnceLock::new();
 
     macro_rules! lib {
@@ -59,31 +58,23 @@ pub mod lib {
 
 
             )+
-
-
-
-
         };
     }
 
     fn build_default_libs() -> HashMap<String, crate::runtime::Scope> {
         let mut map = HashMap::new();
-        lib! {map,"io"=>|scope|{
-                scope.add_native_fn("print", print)?;
+        lib! {map,"lang"=>|scope|{
+            scope.add_native_fn("print", print)?;
+            scope.add_native_fn("str",to_str)?;
+            Ok(())
+            },
+            "io"=>|scope|{
+
                 scope.add_native_fn("input", input)?;
 
                 Ok(())
             },
-            "convert"=>|scope|{
-                scope.add_native_fn("str",str)?;
-                Ok(())
-
-            }
-
-
-
         }
-
         map
     }
 
@@ -91,9 +82,6 @@ pub mod lib {
         DEFAULT_LIBS.get_or_init(build_default_libs)
     }
 
-    pub fn is_std_lib(name: &str) -> bool {
-        get_libs().contains_key(name)
-    }
     pub fn get_std_lib(name: &str) -> Option<Scope> {
         get_libs().get(name).cloned()
     }

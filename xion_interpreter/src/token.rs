@@ -44,7 +44,7 @@ impl<'a> Lexer<'a> {
             next.push(c);
         }
         if self.file.peek().is_none() {
-            warn!("cannot find char {s:?}");
+            warn!("cannot find char \'{s:?}\'");
         }
 
         next

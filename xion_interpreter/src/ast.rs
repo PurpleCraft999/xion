@@ -2,7 +2,7 @@ use std::iter::Peekable;
 
 use log::{debug, error, warn};
 
-use crate::{token::Token::{self, *}};
+use crate::token::Token::{self, *};
 
 pub struct AstBuilder {
     tokens: Peekable<std::vec::IntoIter<Token>>,
@@ -86,12 +86,8 @@ impl AstBuilder {
 
                 Some(Node::Return(return_value))
             }
-            Import =>self.parse_import(),
+            Import => self.parse_import(),
 
-
-
-
-            
             LeftBracket => self.parse_array(),
             Let => self.parse_var(),
             Fn => self.parse_function(),
@@ -162,8 +158,8 @@ impl AstBuilder {
             Comma,
         )?))
     }
-    fn parse_import(&mut self)->Option<Node>{
-        let name =self.next_if_name()?;
+    fn parse_import(&mut self) -> Option<Node> {
+        let name = self.next_if_name()?;
         Some(Node::Import(name))
     }
 

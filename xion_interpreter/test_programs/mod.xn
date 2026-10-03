@@ -1,4 +1,9 @@
-import io;
+import name;
 
 
-print("hello modules");
+let name = Name(name:"emma");
+
+
+
+
+print(name);

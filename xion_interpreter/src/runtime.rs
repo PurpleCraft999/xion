@@ -10,7 +10,7 @@ use crate::ast::{MathSign, Node};
 use crate::class::{ClassInstance, RuntimeClass};
 use crate::functions::{Function, NativeFunction, NativeFunctionHeader, NonNativeFunction};
 use crate::runtime::MathError::{InvalidTypeLeft, InvalidTypeRight};
-use crate::runtime::RuntimeError::DoesNotExist;
+use crate::runtime::RuntimeError::{DoesNotExist, Other};
 use crate::{parse_and_lex, xion_std};
 
 pub type RuntimeReturn = Result<Option<Value>, RuntimeError>;
@@ -23,8 +23,10 @@ pub struct Runtime {
 }
 impl Runtime {
     pub fn main(nodes: Vec<Node>) -> Self {
-        let scope = Scope::new();
-        // scope.add_module("io");
+        let mut scope = Scope::new();
+        if let Err(e) = scope.add_module("lang") {
+            error!("error adding lang module: {e}");
+        }
         Self::with_scope_and_nodes(nodes, scope)
     }
     pub fn with_scope_and_nodes(nodes: Vec<Node>, current_scope: Scope) -> Self {
@@ -57,7 +59,7 @@ impl Runtime {
                 .get_current_scope()
                 .with_var(&var, |v| v.get().clone())
                 .ok_or(RuntimeError::DoesNotExist(format!(
-                    "cannot get variable {var}"
+                    "cannot get variable \"{var}\""
                 )))
                 .map(Some),
 
@@ -66,7 +68,7 @@ impl Runtime {
 
                 if self.get_current_scope_mut().update_var(&name, var).is_err() {
                     Err(RuntimeError::DoesNotExist(format!(
-                        "cannot reassign variable {name}"
+                        "cannot reassign variable \"{name}\""
                     )))
                 } else {
                     Ok(None)
@@ -80,7 +82,7 @@ impl Runtime {
                     .with_function(&func_ast.name, |func| func.clone())
                 else {
                     return Err(DoesNotExist(format!(
-                        "cannot call function {}",
+                        "cannot call function \"{}\"",
                         func_ast.name
                     )));
                 };
@@ -164,7 +166,7 @@ impl Runtime {
                 match s {
                     Some(v) => v,
                     None => Err(RuntimeError::DoesNotExist(format!(
-                        "cannot invoke method {} on var {1} because var {1}",
+                        "cannot invoke method \"{}\" on var \"{1}\" because var \"{1}\"",
                         method_name, var_name
                     ))),
                 }
@@ -231,19 +233,8 @@ impl Runtime {
                 Ok(None)
             }
             Import(name) => {
-                
-                let path = match name{
-                    name if xion_std::lib::is_std_lib(&name)=>name,
-
-
-                    _=>String::from("../libs/") + &name+".xn"
-                };
-                // println!("{path}");
-                
-                
-                self.get_current_scope_mut()
-                .add_module(path)
-                .map(|_| None)},
+                self.get_current_scope_mut().add_module(&name).map(|_| None).map_err(|e|Other(format!("import error: {e}")))
+            }
             _ => Ok(None),
         }
     }
@@ -268,22 +259,21 @@ impl Runtime {
             .nodes
             .clone()
             .into_iter()
-            .filter(|n| matches!(n, FnDeclare(_) | ClassDeclare(_)|Import(_)))
+            .filter(|n| matches!(n, FnDeclare(_) | ClassDeclare(_) | Import(_)))
         {
             self.early_eval(node)
-                .map_err(|e| RuntimeError::Other(format!("error during early eval {e}")))?;
+                .map_err(|e| RuntimeError::Other(format!("error during early eval: {e}")))?;
         }
         Ok(None)
     }
 
     pub fn run(&mut self) -> RuntimeReturn {
         self.parse_ahead()?;
+
         let nodes = std::mem::take(&mut self.nodes);
         for node in nodes {
-            if let Err(err) = self.eval(node) {
-                error!("{err}");
-                return Err(err);
-            }
+            self.eval(node)?;
+
             if self.return_value.is_some() {
                 break;
             }
@@ -500,7 +490,7 @@ impl Scope {
     ) -> Result<(), RuntimeError> {
         if self.functions.contains_key(name) {
             Err(RuntimeError::AlreadyExists(format!(
-                "cannot add native function {name}"
+                "cannot add native function \"{name}\""
             )))
         } else {
             self.functions
@@ -525,7 +515,7 @@ impl Scope {
     pub fn add_var(&mut self, name: String, var: Variable) -> Result<(), RuntimeError> {
         if self.vars.contains_key(&name) {
             return Err(RuntimeError::AlreadyExists(format!(
-                "cannot create variable {name}"
+                "cannot create variable \"{name}\""
             )));
         }
 
@@ -543,7 +533,9 @@ impl Scope {
                 if let Some(parent) = &self.parent_scope {
                     match parent {
                         ParentScope::Mut(parent) => {
-                            if let Some(var) = parent.lock().expect("we are panicing").vars.get_mut(name) {
+                            if let Some(var) =
+                                parent.lock().expect("we are panicing").vars.get_mut(name)
+                            {
                                 *var.get_mut() = var_value;
                                 Ok(())
                             } else {
@@ -626,7 +618,8 @@ impl Scope {
             )));
         }
 
-        self.classes.insert(class.name().to_owned(), Arc::new(class));
+        self.classes
+            .insert(class.name().to_owned(), Arc::new(class));
         Ok(())
     }
     pub fn get_class(&self, name: &str) -> Option<Arc<RuntimeClass>> {
@@ -654,59 +647,59 @@ impl Scope {
         Ok(())
     }
 
-    pub fn add_module<P: AsRef<Path>>(&mut self, path: P) -> Result<(), RuntimeError> {
-        let module = make_module(path).unwrap();
+    pub fn add_module(&mut self, name: &str) -> Result<(), RuntimeError> {
+        let module = make_module(name)?;
         self.extend(module)
     }
 }
 
-pub fn make_module<P: AsRef<Path>>(path: P) -> Result<Scope, std::io::Error> {
-    let path = path.as_ref();
-    if let Some(std) = xion_std::lib::get_std_lib(&path.to_string_lossy()){
-        return Ok(std)
+pub fn make_module(name: &str) -> Result<Scope, RuntimeError> {
+    fn parse_file(path: &Path,scope:&mut Scope)->Result<(), RuntimeError> {
+        let nodes = parse_and_lex(path);
+        let mut run = Runtime::with_scope_and_nodes(nodes, Scope::new());
+        run.run()?;
+        match scope.extend(run.current_scope) {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                error!("module creation error: {e}");
+                Err(e)
+            }
+        }
     }
 
-
-
+    
+    if let Some(std) = xion_std::get_std_lib(name) {
+        return Ok(std);
+    }
+    let path = std::path::PathBuf::from(String::from("xion_interpreter/libs/") + name + ".xn");
+    // debug!("module path {:?}",path);
+    if !path.exists(){
+        error!("path does not exists");
+        return Err(RuntimeError::DoesNotExist(format!("cannot import module \"{name}\"")));
+    }
 
     let mut scope = Scope::new();
 
     if path.is_dir() {
-        let dir = std::fs::read_dir(path)?;
+        let dir = std::fs::read_dir(&path).map_err(|_|RuntimeError::Other(format!("access to {path:?} is denied")))?;
         for file in dir {
             let file = file.unwrap();
 
-            let file_type = file.file_type()?;
+            let file_type = file.file_type().map_err(|e|RuntimeError::Other(e.to_string()))?;
             if file_type.is_file() {
-                let nodes = parse_and_lex(file.path());
-                let mut run = Runtime::with_scope_and_nodes(nodes, Scope::new());
-                let _ = run.run();
-                match scope.extend(run.current_scope) {
-                    Ok(_) => (),
-                    Err(e) => {
-                        error!("module creation error: {e}");
-                        return Err(std::io::Error::other(""));
-                    }
-                }
-                // scopes.insert(file.file_name().to_string_lossy().to_string(), run.current_scope);
-            } else {
+                parse_file(&file.path(), &mut scope)?;
+            } 
+            else {
                 error!("expected only files");
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::IsADirectory,
-                    "only files should be present",
-                ));
+                return Err(RuntimeError::Other("expected only files in module folder".to_string()));
             }
         }
+    } else if path.is_file() {
+        
+        parse_file(&path,&mut scope)?
     }
     Ok(scope)
 }
-
-
-
-
-
-
-
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Variable {

@@ -3,9 +3,9 @@ use crate::{
     functions::Function,
     runtime::{RuntimeError, RuntimeReturn, Scope, Value, Variable},
 };
+use std::collections::HashMap;
 use std::hash::Hash;
 use std::sync::{Arc, Mutex};
-use std::{collections::HashMap};
 
 #[derive(Debug, Clone)]
 pub struct RuntimeClass {
@@ -95,13 +95,13 @@ impl std::fmt::Display for ClassInstance {
         let mut fields = String::new();
         for (name, var) in &self.fields {
             fields += name;
-            fields.push('=');
+            fields.push(':');
             fields += &var.get().to_string();
             fields.push(',');
         }
         fields.pop();
 
-        write!(f, "{}Instance{{ fields:[{fields}] }}", self.class.name)
+        write!(f, "{}Instance {{ fields:[{fields}] }}", self.class.name)
     }
 }
 

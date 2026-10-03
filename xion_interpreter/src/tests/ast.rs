@@ -1,7 +1,11 @@
 use crate::{
     ast::{
-        AstBuilder, ClassAst, FnCallAst, FunctionDefAst, MathSign::Multiply, Node::{self, StringLiteral, *}, VarAst,
-    }, token::Token::{self, *},
+        AstBuilder, ClassAst, FnCallAst, FunctionDefAst,
+        MathSign::Multiply,
+        Node::{self, StringLiteral, *},
+        VarAst,
+    },
+    token::Token::{self, *},
 };
 
 fn ast(vec: Vec<Token>) -> Vec<Node> {
@@ -215,17 +219,27 @@ fn class_method_call() {
     )
 }
 
-
-
 #[test]
-fn make_number_negative(){
-    let ast = ast(vec![Minus,Token::NumberLiteral(5),SemiColon]);
-    assert_eq!(vec![Node::NumberLiteral(-5)],ast)
+fn make_number_negative() {
+    let ast = ast(vec![Minus, Token::NumberLiteral(5), SemiColon]);
+    assert_eq!(vec![Node::NumberLiteral(-5)], ast)
 }
 
-
 #[test]
-fn make_number_negative_during_math_equasion(){
-    let ast = ast(vec![Token::NumberLiteral(23),Asterisk,Minus,Token::NumberLiteral(1),SemiColon]);
-    assert_eq!(vec![Math { left: Box::new(Node::NumberLiteral(23)), op: Multiply, right:Box::new(Node::NumberLiteral(-1))  }],ast)
+fn make_number_negative_during_math_equasion() {
+    let ast = ast(vec![
+        Token::NumberLiteral(23),
+        Asterisk,
+        Minus,
+        Token::NumberLiteral(1),
+        SemiColon,
+    ]);
+    assert_eq!(
+        vec![Math {
+            left: Box::new(Node::NumberLiteral(23)),
+            op: Multiply,
+            right: Box::new(Node::NumberLiteral(-1))
+        }],
+        ast
+    )
 }

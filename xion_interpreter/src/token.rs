@@ -125,6 +125,7 @@ pub enum Token {
     Asterisk,
     Division,
     Dot,
+    Import,
 }
 
 impl Token {
@@ -136,6 +137,7 @@ impl Token {
             "return" => Return,
             "true" => True,
             "false" => False,
+            "import" => Import,
             number if let Ok(num) = number.parse::<i64>() => NumberLiteral(num),
             name if is_name(name) => Name(name.to_string()),
 

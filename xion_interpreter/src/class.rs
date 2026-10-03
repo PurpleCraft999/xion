@@ -4,7 +4,8 @@ use crate::{
     runtime::{RuntimeError, RuntimeReturn, Scope, Value, Variable},
 };
 use std::hash::Hash;
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::sync::{Arc, Mutex};
+use std::{collections::HashMap};
 
 #[derive(Debug, Clone)]
 pub struct RuntimeClass {
@@ -29,9 +30,9 @@ impl RuntimeClass {
         &self.name
     }
 
-    pub fn instantiate(self: &Rc<Self>) -> ClassInstance {
+    pub fn instantiate(self: &Arc<Self>) -> ClassInstance {
         ClassInstance {
-            class: Rc::clone(self),
+            class: Arc::clone(self),
             fields: self.fields.clone(),
         }
     }
@@ -44,7 +45,7 @@ impl PartialEq for RuntimeClass {
 
 #[derive(Debug, Clone)]
 pub struct ClassInstance {
-    class: Rc<RuntimeClass>,
+    class: Arc<RuntimeClass>,
     fields: HashMap<String, Variable>,
 }
 impl ClassInstance {
@@ -52,27 +53,34 @@ impl ClassInstance {
         let Some(method) = self.class.methods.get(name) else {
             return Err(RuntimeError::DoesNotExist(name.to_owned()));
         };
-        let scope = Rc::new(RefCell::new(Scope::new()));
-        scope.borrow_mut().vars = std::mem::take(&mut self.fields);
+        let mut scope = Scope::new();
+        scope.vars = std::mem::take(&mut self.fields);
+        let scope = Arc::new(Mutex::new(scope));
+
         let scope = Scope::with_mutable_parent(scope);
         let result = method.call(args, scope.clone());
         match scope.parent_scope {
             Some(p) => match p {
-                ParentScope::Mut(m) => self.fields = m.take().vars,
+                ParentScope::Mut(m) => {
+                    self.fields = {
+                        let loc = m.lock().expect("we are already panicing");
+                        loc.vars.clone()
+                    }
+                }
                 ParentScope::Normal(_) => panic!("parent was set to mut"),
             },
             None => panic!("we set a parent"),
         };
         result
     }
-    pub fn get_field(&self,name: &str)->Option<&Variable>{
+    pub fn get_field(&self, name: &str) -> Option<&Variable> {
         self.fields.get(name)
     }
-    pub fn get_field_mut(&mut self,name: &str)->Option<&mut Variable>{
+    pub fn get_field_mut(&mut self, name: &str) -> Option<&mut Variable> {
         self.fields.get_mut(name)
     }
-    pub fn set_fields(&mut self,new:HashMap<String,Variable>){
-        self.fields=new;
+    pub fn set_fields(&mut self, new: HashMap<String, Variable>) {
+        self.fields = new;
     }
 }
 

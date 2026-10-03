@@ -3,7 +3,7 @@ use crate::ast::VarAst;
 
 fn run(nodes: Vec<Node>) -> (RuntimeReturn, Runtime) {
     crate::test_log::init_logger();
-    let mut run = Runtime::start(nodes);
+    let mut run = Runtime::main(nodes);
     let err = run.run();
     if let Err(err) = err {
         panic!("{err}")

@@ -28,14 +28,73 @@ pub fn input(_: Vec<Value>) -> Option<Value> {
     Some(Value::String(out))
 }
 
+pub fn str(input: Input) -> Output {
+    if let Some(i) = input.get(0) {
+        Some(Value::String(i.to_string()))
+    } else {
+        None
+    }
+}
+
 pub fn instantiate(_: Input) -> Output {
     log::error!("instantiate was called directly");
     None
 }
 
-// use crate::runtime::Variable;
-// #[derive(xion_interpreter_proc_macros::MakeClass)]
-// struct Name{
-//     name:String
-// }
+pub mod lib {
+    use super::*;
+    use std::{collections::HashMap, sync::OnceLock};
+    use crate::runtime::RuntimeError;
+    use crate::runtime::Scope;
+    static DEFAULT_LIBS: OnceLock<HashMap<String, Scope>> = OnceLock::new();
 
+    macro_rules! lib {
+        ($map:expr, $($name:expr=>$block:expr),+ $(,)?) => {
+            $(
+                let mut scope = crate::runtime::Scope::new();
+                // $block(&mut scope).expect("no names are the same in the same module");
+                let block:fn(&mut Scope)-> Result<(), RuntimeError> = $block;
+                block(&mut scope).expect("all names are unique");
+                $map.insert($name.to_string(),scope);
+
+
+            )+
+
+
+
+
+        };
+    }
+
+    fn build_default_libs() -> HashMap<String, crate::runtime::Scope> {
+        let mut map = HashMap::new();
+        lib! {map,"io"=>|scope|{
+                scope.add_native_fn("print", print)?;
+                scope.add_native_fn("input", input)?;
+
+                Ok(())
+            },
+            "convert"=>|scope|{
+                scope.add_native_fn("str",str)?;
+                Ok(())
+
+            }
+
+
+
+        }
+
+        map
+    }
+
+    fn get_libs() -> &'static HashMap<String, Scope> {
+        DEFAULT_LIBS.get_or_init(build_default_libs)
+    }
+
+    pub fn is_std_lib(name: &str) -> bool {
+        get_libs().contains_key(name)
+    }
+    pub fn get_std_lib(name: &str) -> Option<Scope> {
+        get_libs().get(name).cloned()
+    }
+}

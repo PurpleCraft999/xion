@@ -1,7 +1,7 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
-use std::rc::Rc;
+use std::path::Path;
+use std::sync::{Arc, Mutex};
 
 use log::{debug, error, warn};
 
@@ -11,7 +11,7 @@ use crate::class::{ClassInstance, RuntimeClass};
 use crate::functions::{Function, NativeFunction, NativeFunctionHeader, NonNativeFunction};
 use crate::runtime::MathError::{InvalidTypeLeft, InvalidTypeRight};
 use crate::runtime::RuntimeError::DoesNotExist;
-use crate::xion_std;
+use crate::{parse_and_lex, xion_std};
 
 pub type RuntimeReturn = Result<Option<Value>, RuntimeError>;
 
@@ -22,10 +22,9 @@ pub struct Runtime {
     return_value: Option<Value>,
 }
 impl Runtime {
-    pub fn start(nodes: Vec<Node>) -> Self {
-        let mut scope = Scope::new();
-        scope.attach_std_lib();
-
+    pub fn main(nodes: Vec<Node>) -> Self {
+        let scope = Scope::new();
+        // scope.add_module("io");
         Self::with_scope_and_nodes(nodes, scope)
     }
     pub fn with_scope_and_nodes(nodes: Vec<Node>, current_scope: Scope) -> Self {
@@ -201,7 +200,7 @@ impl Runtime {
                     })
                     .flatten())
             }
-            ClassDeclare(_) | FnDeclare(_) => Ok(None),
+            ClassDeclare(_) | FnDeclare(_) | Import(_) => Ok(None),
         }
     }
     fn early_eval(&mut self, node: Node) -> RuntimeReturn {
@@ -219,7 +218,7 @@ impl Runtime {
                 self.get_current_scope_mut().add_class(runtime_class)?;
 
                 self.get_current_scope_mut()
-                    .add_native_fn(&class.name, xion_std::instantiate);
+                    .add_native_fn(&class.name, xion_std::instantiate)?;
                 Ok(None)
             }
             FnDeclare(func) => {
@@ -231,6 +230,20 @@ impl Runtime {
                     ))?;
                 Ok(None)
             }
+            Import(name) => {
+                
+                let path = match name{
+                    name if xion_std::lib::is_std_lib(&name)=>name,
+
+
+                    _=>String::from("../libs/") + &name+".xn"
+                };
+                // println!("{path}");
+                
+                
+                self.get_current_scope_mut()
+                .add_module(path)
+                .map(|_| None)},
             _ => Ok(None),
         }
     }
@@ -255,7 +268,7 @@ impl Runtime {
             .nodes
             .clone()
             .into_iter()
-            .filter(|n| matches!(n, FnDeclare(_) | ClassDeclare(_)))
+            .filter(|n| matches!(n, FnDeclare(_) | ClassDeclare(_)|Import(_)))
         {
             self.early_eval(node)
                 .map_err(|e| RuntimeError::Other(format!("error during early eval {e}")))?;
@@ -440,30 +453,30 @@ pub enum MathError {
 #[derive(Debug, Clone)]
 pub enum ParentScope {
     Normal(Box<Scope>),
-    Mut(Rc<std::cell::RefCell<Scope>>),
+    Mut(Arc<Mutex<Scope>>),
 }
 impl ParentScope {
     fn with_var_mut<T>(&mut self, name: &str, c: impl FnOnce(&mut Variable) -> T) -> Option<T> {
         match self {
-            ParentScope::Mut(p) => p.borrow_mut().with_var_mut(name, c),
+            ParentScope::Mut(p) => p.lock().ok()?.with_var_mut(name, c),
             ParentScope::Normal(p) => p.with_var_mut(name, c),
         }
     }
     fn with_var<T>(&self, name: &str, c: impl FnOnce(&Variable) -> T) -> Option<T> {
         match self {
-            ParentScope::Mut(p) => p.borrow_mut().with_var(name, c),
+            ParentScope::Mut(p) => p.lock().ok()?.with_var(name, c),
             ParentScope::Normal(p) => p.with_var(name, c),
         }
     }
     fn with_function<T>(&self, name: &str, c: impl FnOnce(&Function) -> T) -> Option<T> {
         match self {
-            ParentScope::Mut(p) => p.borrow_mut().with_function(name, c),
+            ParentScope::Mut(p) => p.lock().ok()?.with_function(name, c),
             ParentScope::Normal(p) => p.with_function(name, c),
         }
     }
-    fn get_class(&self, name: &str) -> Option<Rc<RuntimeClass>> {
+    fn get_class(&self, name: &str) -> Option<Arc<RuntimeClass>> {
         match self {
-            ParentScope::Mut(m) => m.borrow().get_class(name),
+            ParentScope::Mut(m) => m.lock().ok()?.get_class(name),
             ParentScope::Normal(p) => p.get_class(name),
         }
     }
@@ -474,19 +487,26 @@ pub struct Scope {
     pub(crate) parent_scope: Option<ParentScope>,
     pub(crate) vars: HashMap<String, Variable>,
     functions: HashMap<String, Function>,
-    classes: HashMap<String, Rc<RuntimeClass>>,
+    classes: HashMap<String, Arc<RuntimeClass>>,
 }
 impl Scope {
     pub fn new() -> Self {
         Self::default()
     }
-    fn attach_std_lib(&mut self) {
-        self.add_native_fn("print", xion_std::print);
-        self.add_native_fn("input", xion_std::input);
-    }
-    fn add_native_fn(&mut self, name: &str, func: NativeFunctionHeader) {
-        self.functions
-            .insert(name.to_owned(), Function::Native(NativeFunction::new(func)));
+    pub fn add_native_fn(
+        &mut self,
+        name: &str,
+        func: NativeFunctionHeader,
+    ) -> Result<(), RuntimeError> {
+        if self.functions.contains_key(name) {
+            Err(RuntimeError::AlreadyExists(format!(
+                "cannot add native function {name}"
+            )))
+        } else {
+            self.functions
+                .insert(name.to_owned(), Function::Native(NativeFunction::new(func)));
+            Ok(())
+        }
     }
 
     pub fn with_parent(scope: Scope) -> Self {
@@ -495,7 +515,7 @@ impl Scope {
             ..Default::default()
         }
     }
-    pub fn with_mutable_parent(scope: Rc<RefCell<Scope>>) -> Self {
+    pub fn with_mutable_parent(scope: Arc<Mutex<Scope>>) -> Self {
         Self {
             parent_scope: Some(ParentScope::Mut(scope)),
             ..Default::default()
@@ -513,7 +533,7 @@ impl Scope {
         Ok(())
     }
 
-    fn update_var(&mut self, name: &str, var_value: Value) -> Result<(), RuntimeError> {
+    pub fn update_var(&mut self, name: &str, var_value: Value) -> Result<(), RuntimeError> {
         match self.vars.get_mut(name) {
             Some(value) => {
                 *value.get_mut() = var_value;
@@ -523,7 +543,7 @@ impl Scope {
                 if let Some(parent) = &self.parent_scope {
                     match parent {
                         ParentScope::Mut(parent) => {
-                            if let Some(var) = parent.borrow_mut().vars.get_mut(name) {
+                            if let Some(var) = parent.lock().expect("we are panicing").vars.get_mut(name) {
                                 *var.get_mut() = var_value;
                                 Ok(())
                             } else {
@@ -544,7 +564,7 @@ impl Scope {
         }
     }
 
-    fn add_func(&mut self, func: NonNativeFunction) -> Result<(), RuntimeError> {
+    pub fn add_func(&mut self, func: NonNativeFunction) -> Result<(), RuntimeError> {
         if self.functions.contains_key(func.name()) {
             return Err(RuntimeError::AlreadyExists(format!(
                 "funtion {}",
@@ -606,13 +626,10 @@ impl Scope {
             )));
         }
 
-        self.classes.insert(class.name().to_owned(), Rc::new(class));
+        self.classes.insert(class.name().to_owned(), Arc::new(class));
         Ok(())
     }
-    // fn add_native_class<T:ToClass>(&mut self){
-    //     self.add_class(T::to_class()).expect("names should not overlap with native classes")
-    // }
-    pub fn get_class(&self, name: &str) -> Option<Rc<RuntimeClass>> {
+    pub fn get_class(&self, name: &str) -> Option<Arc<RuntimeClass>> {
         self.classes
             .get(name)
             .cloned()
@@ -621,7 +638,75 @@ impl Scope {
                 None => None,
             })
     }
+    fn extend(&mut self, other: Scope) -> Result<(), RuntimeError> {
+        for (name, func) in other.functions {
+            match func {
+                Function::NonNative(f) => self.add_func(f),
+                Function::Native(f) => self.add_native_fn(&name, f.inner()),
+            }?
+        }
+        for (name, var) in other.vars {
+            self.add_var(name, var)?
+        }
+        for (_, class) in other.classes {
+            self.add_class(Arc::unwrap_or_clone(class))?
+        }
+        Ok(())
+    }
+
+    pub fn add_module<P: AsRef<Path>>(&mut self, path: P) -> Result<(), RuntimeError> {
+        let module = make_module(path).unwrap();
+        self.extend(module)
+    }
 }
+
+pub fn make_module<P: AsRef<Path>>(path: P) -> Result<Scope, std::io::Error> {
+    let path = path.as_ref();
+    if let Some(std) = xion_std::lib::get_std_lib(&path.to_string_lossy()){
+        return Ok(std)
+    }
+
+
+
+
+    let mut scope = Scope::new();
+
+    if path.is_dir() {
+        let dir = std::fs::read_dir(path)?;
+        for file in dir {
+            let file = file.unwrap();
+
+            let file_type = file.file_type()?;
+            if file_type.is_file() {
+                let nodes = parse_and_lex(file.path());
+                let mut run = Runtime::with_scope_and_nodes(nodes, Scope::new());
+                let _ = run.run();
+                match scope.extend(run.current_scope) {
+                    Ok(_) => (),
+                    Err(e) => {
+                        error!("module creation error: {e}");
+                        return Err(std::io::Error::other(""));
+                    }
+                }
+                // scopes.insert(file.file_name().to_string_lossy().to_string(), run.current_scope);
+            } else {
+                error!("expected only files");
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::IsADirectory,
+                    "only files should be present",
+                ));
+            }
+        }
+    }
+    Ok(scope)
+}
+
+
+
+
+
+
+
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Variable {

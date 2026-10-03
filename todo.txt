@@ -3,7 +3,6 @@ escape codes for strings
 modules
 When added modules make sure to update runtime class creation code 
 
-make tests for field and method stuff
 
 consider merging two arrays with +
 if statements

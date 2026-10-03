@@ -27,6 +27,9 @@ impl NativeFunction {
     pub fn new(func: NativeFunctionHeader) -> Self {
         Self { func }
     }
+    pub fn inner(self)->NativeFunctionHeader{
+        self.func
+    }
 }
 
 #[derive(Debug, Clone)]

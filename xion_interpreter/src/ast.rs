@@ -2,7 +2,7 @@ use std::iter::Peekable;
 
 use log::{debug, error, warn};
 
-use crate::token::Token::{self, *};
+use crate::{token::Token::{self, *}};
 
 pub struct AstBuilder {
     tokens: Peekable<std::vec::IntoIter<Token>>,
@@ -71,7 +71,7 @@ impl AstBuilder {
     where
         E: Into<Option<Token>>,
         Option<&'expr Token>: From<&'expr E>,
-    { 
+    {
         let node = match token {
             NumberLiteral(_) | Name(_) | StringLiteral(_) | LeftParen | Minus => {
                 pratt_parser::parse_expression(self, 0, token, end_token.into())
@@ -86,6 +86,12 @@ impl AstBuilder {
 
                 Some(Node::Return(return_value))
             }
+            Import =>self.parse_import(),
+
+
+
+
+            
             LeftBracket => self.parse_array(),
             Let => self.parse_var(),
             Fn => self.parse_function(),
@@ -116,7 +122,12 @@ impl AstBuilder {
         }
     }
 
-    fn parse_sequence_of_exprs(&mut self, start: Token, end: Token, sep: Token) -> Option<Vec<Node>> {
+    fn parse_sequence_of_exprs(
+        &mut self,
+        start: Token,
+        end: Token,
+        sep: Token,
+    ) -> Option<Vec<Node>> {
         let mut args = Vec::new();
         if !self.consume_if(|t| t == &start) {
             warn!("List does not start with token: {start:?}");
@@ -145,12 +156,15 @@ impl AstBuilder {
         self.parse_sequence_of_exprs(LeftParen, RightParen, Comma)
     }
     fn parse_array(&mut self) -> Option<Node> {
-        
         Some(Node::ArrayLiteral(self.parse_sequence_of_exprs(
             LeftBracket,
             RightBracket,
             Comma,
         )?))
+    }
+    fn parse_import(&mut self)->Option<Node>{
+        let name =self.next_if_name()?;
+        Some(Node::Import(name))
     }
 
     fn parse_function(&mut self) -> Option<Node> {
@@ -312,6 +326,7 @@ pub enum Node {
         field_name: String,
         new_value: Box<Node>,
     },
+    Import(String),
 }
 #[derive(Debug, Clone)]
 #[cfg_attr(test, derive(PartialEq))]

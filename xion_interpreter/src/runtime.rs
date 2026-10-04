@@ -93,7 +93,7 @@ impl Runtime {
                         if let Some(class) = self.get_current_scope().get_class(&func_ast.name) {
                             debug!("instantiating class {class:?}");
                             let mut instance = class.instantiate();
-                            let mut scope = Scope::new();
+                            let mut scope = self.child_scope();
                             scope.vars = class.fields.clone();
                             // should run any VarAssigns for the class
                             let mut runtime = Runtime::with_scope_and_nodes(func_ast.args, scope);
@@ -108,9 +108,9 @@ impl Runtime {
 
                 //evaluates any variable names and the like
                 let args = func_ast.args;
-                let arguments = self.eval_list(args);
+                let arguments = self.eval_list(args)?;
 
-                func.call(arguments, self.child_scope())
+                func.call(arguments, self.child_scoped_no_var())
             }
             BoolLiteral(b) => Ok(Some(Value::Bool(b))),
             Return(value) => {
@@ -142,17 +142,13 @@ impl Runtime {
                     value.map(Some).map_err(RuntimeError::MathError)
                 }
             }
-            ArrayLiteral(vec) => Ok(Some(Value::Array(
-                vec.into_iter()
-                    .map_while(|n| self.eval(n).ok().flatten())
-                    .collect(),
-            ))),
+            ArrayLiteral(vec) => Ok(Some(Value::Array(self.eval_list(vec)?))),
             MethodCall {
                 var_name,
                 method_name,
                 args,
             } => {
-                let args = self.eval_list(args);
+                let args = self.eval_list(args)?;
 
                 let s = self.get_current_scope_mut().with_var_mut(&var_name, |var| {
                     match var.get_mut() {
@@ -209,7 +205,8 @@ impl Runtime {
         match node {
             ClassDeclare(class) => {
                 //TODO: In the future this scope should be only globals,consts, and the like and not completly empty
-                let mut runtime = Runtime::with_scope_and_nodes(class.fields, Scope::new());
+                let mut runtime =
+                    Runtime::with_scope_and_nodes(class.fields, self.child_scoped_no_var());
                 runtime.run()?;
 
                 let runtime_class = RuntimeClass {
@@ -232,9 +229,11 @@ impl Runtime {
                     ))?;
                 Ok(None)
             }
-            Import(name) => {
-                self.get_current_scope_mut().add_module(&name).map(|_| None).map_err(|e|Other(format!("import error: {e}")))
-            }
+            Import(name) => self
+                .get_current_scope_mut()
+                .add_module(&name)
+                .map(|_| None)
+                .map_err(|e| Other(format!("import error: {e}"))),
             _ => Ok(None),
         }
     }
@@ -242,16 +241,37 @@ impl Runtime {
     fn child_scope(&self) -> Scope {
         Scope::with_parent(self.get_current_scope().clone())
     }
+    fn child_scoped_no_var(&self) -> Scope {
+        let scope = {
+            let mut scope = self.get_current_scope().clone();
+            while !scope.vars.is_empty() {
+                scope.vars = HashMap::new();
+                if let Some(s) = scope.parent_scope {
+                    scope = match s {
+                        ParentScope::Mut(m) => m.lock().expect("panicking").clone(),
+                        ParentScope::Normal(n) => *n,
+                    }
+                }
+            }
 
-    fn eval_list(&mut self, vec: Vec<Node>) -> Vec<Value> {
+            scope
+        };
+
+        Scope::with_parent(scope)
+    }
+
+    fn eval_list(&mut self, vec: Vec<Node>) -> Result<Vec<Value>, RuntimeError> {
         let mut arguments = Vec::new();
 
         for node in vec {
-            if let Some(node) = self.eval(node).ok().flatten() {
+            let eval = self.eval(node)?;
+            if let Some(node) = eval {
                 arguments.push(node)
+            } else {
+                return Err(RuntimeError::RequireValue);
             }
         }
-        arguments
+        Ok(arguments)
     }
     ///parses functions and classes
     fn parse_ahead(&mut self) -> RuntimeReturn {
@@ -272,11 +292,12 @@ impl Runtime {
 
         let nodes = std::mem::take(&mut self.nodes);
         for node in nodes {
-            self.eval(node)?;
-
-            if self.return_value.is_some() {
+            if matches!(node, Return(_)) {
+                self.eval(node)?;
                 break;
             }
+
+            self.eval(node)?;
         }
         debug!("{self:?}");
         Ok(self.return_value.take())
@@ -500,6 +521,7 @@ impl Scope {
     }
 
     pub fn with_parent(scope: Scope) -> Self {
+        // scope.vars=HashMap::new();
         Self {
             parent_scope: Some(ParentScope::Normal(Box::new(scope))),
             ..Default::default()
@@ -654,49 +676,61 @@ impl Scope {
 }
 
 pub fn make_module(name: &str) -> Result<Scope, RuntimeError> {
-    fn parse_file(path: &Path,scope:&mut Scope)->Result<(), RuntimeError> {
+    fn parse_file(path: &Path) -> Result<Scope, RuntimeError> {
         let nodes = parse_and_lex(path);
         let mut run = Runtime::with_scope_and_nodes(nodes, Scope::new());
         run.run()?;
-        match scope.extend(run.current_scope) {
-            Ok(_) => Ok(()),
-            Err(e) => {
-                error!("module creation error: {e}");
-                Err(e)
+        Ok(run.current_scope)
+    }
+    fn parse_path(path: &Path) -> Result<Scope, RuntimeError> {
+        let mut scope = Scope::new();
+        if path.is_file() {
+            scope.extend(parse_file(path)?)?
+        } else if path.is_dir() {
+            let dir = std::fs::read_dir(path)
+                .map_err(|e| RuntimeError::Other(format!("error: {e} on path {path:?}")))?
+                .flatten();
+            for file in dir {
+                let file_type = file
+                    .file_type()
+                    .map_err(|e| RuntimeError::Other(e.to_string()))?;
+                if file_type.is_file() {
+                    scope.extend(parse_file(&file.path())?)?;
+                } else if file_type.is_dir() {
+                    scope.extend(parse_path(&file.path())?)?
+                } else {
+                    error!("expected only files and dirs");
+                    return Err(RuntimeError::Other(
+                        "expected only files in module folder".to_string(),
+                    ));
+                }
             }
         }
+        Ok(scope)
     }
 
-    
     if let Some(std) = xion_std::get_std_lib(name) {
         return Ok(std);
     }
-    let path = std::path::PathBuf::from(String::from("xion_interpreter/libs/") + name + ".xn");
+    let mut path = std::path::PathBuf::from(String::from("xlibs/") + name);
     // debug!("module path {:?}",path);
-    if !path.exists(){
-        error!("path does not exists");
-        return Err(RuntimeError::DoesNotExist(format!("cannot import module \"{name}\"")));
+    if !path.exists() {
+        path.set_extension("xn");
+        if !path.exists() {
+            error!("path {path:?} does not exists");
+            return Err(RuntimeError::DoesNotExist(format!(
+                "cannot import module \"{name}\""
+            )));
+        }
     }
 
     let mut scope = Scope::new();
-
-    if path.is_dir() {
-        let dir = std::fs::read_dir(&path).map_err(|_|RuntimeError::Other(format!("access to {path:?} is denied")))?;
-        for file in dir {
-            let file = file.unwrap();
-
-            let file_type = file.file_type().map_err(|e|RuntimeError::Other(e.to_string()))?;
-            if file_type.is_file() {
-                parse_file(&file.path(), &mut scope)?;
-            } 
-            else {
-                error!("expected only files");
-                return Err(RuntimeError::Other("expected only files in module folder".to_string()));
-            }
+    match scope.extend(parse_path(&path)?) {
+        Ok(()) => (),
+        Err(e) => {
+            error!("module creation error: {e}");
+            return Err(e);
         }
-    } else if path.is_file() {
-        
-        parse_file(&path,&mut scope)?
     }
     Ok(scope)
 }

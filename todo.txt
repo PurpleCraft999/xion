@@ -1,6 +1,5 @@
 escape codes for strings
 
-modules
 add module testing
 When added modules make sure to update runtime class creation code 
 

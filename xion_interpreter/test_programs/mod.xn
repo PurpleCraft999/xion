@@ -1,9 +1,14 @@
 import name;
+import foo;
+
+let var = "emma";
+
+let name = Name(name:var);
 
 
-let name = Name(name:"emma");
+let wew = [404,dsdsd];
 
-
+print(bar(3));
 
 
 print(name);

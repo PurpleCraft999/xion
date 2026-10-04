@@ -29,7 +29,7 @@ fn input(_: Vec<Value>) -> Option<Value> {
 }
 
 fn to_str(input: Input) -> Output {
-    input.first().map(|v|Value::String(v.to_string()))
+    input.first().map(|v| Value::String(v.to_string()))
 }
 
 pub fn instantiate(_: Input) -> Output {
@@ -37,8 +37,7 @@ pub fn instantiate(_: Input) -> Output {
     None
 }
 
-
-pub use lib::{get_std_lib};
+pub use lib::get_std_lib;
 
 mod lib {
     use super::*;

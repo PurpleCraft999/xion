@@ -8,8 +8,8 @@ fn main() {
 
     let nodes = xion_interpreter::parse_and_lex("xion_interpreter/test_programs/mod.xn");
     debug!("running main");
-    match Runtime::main(nodes).run(){
-        Ok(_)=>(),
-        Err(e)=>log::error!("{e}")
+    match Runtime::main(nodes).run() {
+        Ok(_) => (),
+        Err(e) => log::error!("{e}"),
     }
 }

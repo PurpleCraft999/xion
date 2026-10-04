@@ -1,0 +1,8 @@
+{
+    "lldb.displayFormat": "auto",
+    "lldb.launch.expressions": "native",
+    "lldb.launch.initCommands": [
+        "command script import \"~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/etc/lldb_lookup.py\"",
+        "command source -s 1 \"~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/etc/lldb_commands\""
+    ]
+}

@@ -3,7 +3,7 @@ use std::fmt::{Debug, Display};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use log::{debug, error, warn};
+use log::{debug, error, info, warn};
 
 use crate::ast::Node::*;
 use crate::ast::{MathSign, Node};
@@ -46,10 +46,8 @@ impl Runtime {
 
     fn eval(&mut self, node: Node) -> RuntimeReturn {
         match node {
-            VarDeclare{name,value} => {
-                let value = self
-                    .eval(*value)?
-                    .ok_or(RuntimeError::RequireValue)?;
+            VarDeclare { name, value } => {
+                let value = self.eval(*value)?.ok_or(RuntimeError::RequireValue)?;
                 self.get_current_scope_mut()
                     .add_var(name.clone(), Variable::new(value))?;
                 Ok(None)
@@ -65,7 +63,6 @@ impl Runtime {
 
             VarReasign { name, new_value } => {
                 let var = self.eval(*new_value)?.ok_or(RuntimeError::RequireValue)?;
-
                 if self.get_current_scope_mut().update_var(&name, var).is_err() {
                     Err(RuntimeError::DoesNotExist(format!(
                         "cannot reassign variable \"{name}\""
@@ -76,25 +73,54 @@ impl Runtime {
             }
             NumberLiteral(num) => Ok(Some(Value::Number(num))),
 
-            FnCall{name,arguments} => {
+            FnCall { name, arguments } => {
                 let Some(func) = self
                     .get_current_scope()
                     .with_function(&name, |func| func.clone())
                 else {
-                    return Err(DoesNotExist(format!(
-                        "cannot call function \"{}\"",
-                        name
-                    )));
+                    return Err(DoesNotExist(format!("cannot call function \"{}\"", name)));
                 };
 
                 //class constructor
                 match func {
                     Function::Native(_) => {
                         if let Some(class) = self.get_current_scope().get_class(&name) {
+                            const INJECTED_VAR_NAME:&str = "@from_constructor";
                             debug!("instantiating class {class:?}");
                             let mut instance = class.instantiate();
                             let mut scope = self.child_scope();
-                            scope.vars = class.fields.clone();
+
+                            scope.parent_scope = if let ParentScope::Normal(n) =
+                                scope.parent_scope.as_ref().expect("we declared a child scope")
+                            {
+                                Some(ParentScope::Normal(Box::new(Scope { vars: n.vars.clone()
+                                    .into_iter()
+                                    .map(|(k, v)| (k + INJECTED_VAR_NAME, v))
+                                    .collect(),..Default::default() })))
+                                
+                                
+                            } else {
+                                error!("child scope does not have parent");
+                                None
+                            };
+                            let mut arguments = arguments;
+                            for argument in &mut arguments{
+                                match argument{
+                                    Node::VarReasign{new_value,..}=>{
+                                        
+                                    match &mut **new_value{
+                                        Node::VarRef(name)=>*name+=INJECTED_VAR_NAME,
+                                        _=>()
+                                    }
+                                    
+                                }
+                                _=>(),
+                                }
+                            }
+                            // //
+                            // scope.vars.extend(class.fields.clone());
+                            scope.vars.extend(class.fields.clone());
+
                             // should run any VarAssigns for the class
                             let mut runtime = Runtime::with_scope_and_nodes(arguments, scope);
                             runtime.run()?;
@@ -197,15 +223,14 @@ impl Runtime {
                     })
                     .flatten())
             }
-            ClassDeclare{..}| FnDeclare{..} | Import(_) => Ok(None),
+            ClassDeclare { .. } | FnDeclare { .. } | Import(_) => Ok(None),
         }
     }
     fn early_eval(&mut self, node: Node) -> RuntimeReturn {
         match node {
-            ClassDeclare{name,body} => {
+            ClassDeclare { name, body } => {
                 //TODO: In the future this scope should be only globals,consts, and the like and not completly empty
-                let mut runtime =
-                    Runtime::with_scope_and_nodes(body, self.child_scoped_no_var());
+                let mut runtime = Runtime::with_scope_and_nodes(body, self.child_scoped_no_var());
                 runtime.run()?;
 
                 let runtime_class = RuntimeClass {
@@ -219,13 +244,13 @@ impl Runtime {
                     .add_native_fn(&name, xion_std::instantiate)?;
                 Ok(None)
             }
-            FnDeclare{name,parameters,body} => {
+            FnDeclare {
+                name,
+                parameters,
+                body,
+            } => {
                 self.get_current_scope_mut()
-                    .add_func(NonNativeFunction::new(
-                        name.clone(),
-                        parameters,
-                        body,
-                    ))?;
+                    .add_func(NonNativeFunction::new(name.clone(), parameters, body))?;
                 Ok(None)
             }
             Import(name) => self
@@ -278,7 +303,7 @@ impl Runtime {
             .nodes
             .clone()
             .into_iter()
-            .filter(|n| matches!(n, FnDeclare{..} | ClassDeclare{..} | Import(_)))
+            .filter(|n| matches!(n, FnDeclare { .. } | ClassDeclare { .. } | Import(_)))
         {
             self.early_eval(node)
                 .map_err(|e| RuntimeError::Other(format!("error during early eval: {e}")))?;
@@ -707,10 +732,10 @@ pub fn make_module(name: &str) -> Result<Scope, RuntimeError> {
         }
         Ok(scope)
     }
-
     if let Some(std) = xion_std::get_std_lib(name) {
         return Ok(std);
     }
+
     let mut path = std::path::PathBuf::from(String::from("xlibs/") + name);
     // debug!("module path {:?}",path);
     if !path.exists() {

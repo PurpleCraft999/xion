@@ -25,7 +25,7 @@ fn input(_: Vec<Value>) -> Option<Value> {
         Ok(_) => (),
         Err(err) => println!("Error reading input steam {err}"),
     }
-    Some(Value::String(out))
+    Some(Value::String(out.trim().to_string()))
 }
 
 fn to_str(input: Input) -> Output {

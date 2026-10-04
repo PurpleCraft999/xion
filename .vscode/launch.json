@@ -1,0 +1,52 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug unit tests in library 'xion_interpreter'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--package=xion_interpreter"
+                ]
+            }
+        },
+        {
+            "name": "Debug executable 'xion_interpreter'",
+            "type": "lldb",
+            "request": "launch",
+            "terminal":"integrated",
+            "cargo": {
+                "args": [
+                    "run",
+                    "--bin=xion_interpreter",
+                    "--package=xion_interpreter"
+                ]
+            },
+            "sourceLanguages": [
+                "rust"
+            ],
+            "initCommands": [
+                "command script import \"~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/etc/lldb_lookup.py\"",
+                "command source -s 1 \"~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/etc/lldb_commands\""
+            ],
+            "args": []
+        },
+        {
+            "name": "Debug unit tests in executable 'xion_interpreter'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--bin=xion_interpreter",
+                    "--package=xion_interpreter"
+                ]
+            }
+        }
+    ]
+}

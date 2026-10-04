@@ -1,14 +1,14 @@
-import name;
-import foo;
-
-let var = "emma";
-
-let name = Name(name:var);
+class Name{
+    let name = "default";
+}
 
 
-let wew = [404,dsdsd];
-
-print(bar(3));
 
 
-print(name);
+fn foo(){
+    let name = "john";
+    return Name(name:name);
+}
+
+
+print(foo());

@@ -90,7 +90,7 @@ impl AstBuilder {
                 Some(Node::Return(return_value))
             }
             Import => self.parse_import(),
-
+            If=>self.parse_if_statement(),
             LeftBracket => self.parse_array(),
             Let => self.parse_var(),
             Fn => self.parse_function(),
@@ -153,6 +153,14 @@ impl AstBuilder {
 
     fn parse_args(&mut self) -> Option<Vec<Node>> {
         self.parse_sequence_of_exprs(LeftParen, RightParen, Comma)
+    }
+    fn parse_if_statement(&mut self)->Option<Node>{
+        self.consume_if(|t|t==&If);
+        let next = self.next()?;
+        let con =self.parse_expr(next, &LeftBrace)?;
+        let body = self.parse_scope()?;
+        Some(Node::If { condition:Box::new(con) , body })
+        
     }
     fn parse_array(&mut self) -> Option<Node> {
         Some(Node::ArrayLiteral(self.parse_sequence_of_exprs(
@@ -271,6 +279,7 @@ impl AstBuilder {
                 Fn => self.parse_function(),
 
                 EOF => break,
+                If=>self.parse_if_statement(),
 
                 _ => {
                     let next = self.next().expect("we already peeked");
@@ -342,6 +351,10 @@ pub enum Node {
         new_value: Box<Node>,
     },
     Import(String),
+    If{
+        condition:Box<Node>,
+        body:Vec<Node>,
+    }
 }
 #[derive(Debug, Clone)]
 #[cfg_attr(test, derive(PartialEq))]

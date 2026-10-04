@@ -1,0 +1,9 @@
+
+
+let x = 5;
+if 0{
+    x=3;
+   # print("hello world");
+}
+
+print(x);

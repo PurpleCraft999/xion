@@ -222,6 +222,27 @@ impl Runtime {
                     })
                     .flatten())
             }
+            If { condition, body }=>{
+                let condition = self.eval(*condition)?.ok_or(RuntimeError::RequireValue)?;
+                if let Some(b) =  condition.to_bool(){
+                    if b{
+                        // self.eval_list(body)?;
+                        let current_scope = Arc::new(Mutex::new(self.get_current_scope().clone()));
+                        let run_scope = Scope::with_mutable_parent(current_scope.clone());
+                        let mut runtime = Runtime::with_scope_and_nodes(body, run_scope);
+                        runtime.run()?;
+                        *self.get_current_scope_mut() = current_scope.lock().expect("panicking").clone()
+                    } 
+                    
+                    Ok(None)
+
+                } else{
+                    Err(RuntimeError::TypeError { actual_value: condition.value_type(), expected_value: ValueType::Bool })
+                }
+
+
+
+            }
             ClassDeclare { .. } | FnDeclare { .. } | Import(_) => Ok(None),
         }
     }
@@ -264,6 +285,12 @@ impl Runtime {
     fn child_scope(&self) -> Scope {
         Scope::with_parent(self.get_current_scope().clone())
     }
+    // fn chlid_scope_mut(&mut self)->Scope{
+    //         let scope = self.get_current_scope_mut();
+    //         let scope = Arc::new(Mutex::new(scope));
+
+    //         Scope::with_mutable_parent(scope)
+    // }
     fn child_scoped_no_var(&self) -> Scope {
         let scope = {
             let mut scope = self.get_current_scope().clone();
@@ -422,6 +449,17 @@ impl Value {
             Self::String(_) => ValueType::String,
         }
     }
+    fn to_bool(&self)->Option<bool>{
+        match self{
+            Self::Bool(bool)=>Some(*bool),
+            Self::Number(num)=> Some(if *num==0{false} else {true}),
+
+            _=>None
+        }
+    }
+
+
+
 }
 impl From<String> for Value {
     fn from(value: String) -> Self {

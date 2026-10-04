@@ -6,7 +6,7 @@ consider merging two arrays with +
 if statements
 while loops
 for loops
-function arg len checking
+better functions
 conversion functions for types
 add floats
 add std objects

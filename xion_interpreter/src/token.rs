@@ -126,18 +126,20 @@ pub enum Token {
     Division,
     Dot,
     Import,
+    If,
 }
 
 impl Token {
     fn from_str(s: &str) -> Option<Self> {
         let token = match s {
-            KEY_WORD_LET => Let,
-            KEY_WORD_CLASS => Class,
+            "let" => Let,
+            "class" => Class,
             "fn" => Fn,
             "return" => Return,
             "true" => True,
             "false" => False,
             "import" => Import,
+            "if"=>If,
             number if let Ok(num) = number.parse::<i64>() => NumberLiteral(num),
             name if is_name(name) => Name(name.to_string()),
 
@@ -175,8 +177,7 @@ impl Token {
         matches!(self, Plus | Minus | Asterisk)
     }
 }
-pub const KEY_WORD_LET: &str = "let";
-pub const KEY_WORD_CLASS: &str = "class";
+
 
 #[cfg(test)]
 #[path = "tests/lexer.rs"]

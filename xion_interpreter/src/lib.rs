@@ -6,7 +6,7 @@ pub mod functions;
 pub mod runtime;
 pub mod token;
 mod xion_std;
-
+pub use runtime::Value;
 #[cfg(test)]
 mod test_log {
     use std::sync::Once;

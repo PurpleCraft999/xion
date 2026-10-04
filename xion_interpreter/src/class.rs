@@ -1,7 +1,8 @@
 use crate::runtime::ParentScope;
 use crate::{
     functions::Function,
-    runtime::{RuntimeError, RuntimeReturn, Scope, Value, Variable},
+    Value,
+    runtime::{RuntimeError, RuntimeReturn, Scope, Variable},
 };
 use std::collections::HashMap;
 use std::hash::Hash;

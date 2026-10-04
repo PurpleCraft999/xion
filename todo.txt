@@ -1,8 +1,6 @@
 escape codes for strings
 
 add module testing
-When added modules make sure to update runtime class creation code 
-
 
 consider merging two arrays with +
 if statements

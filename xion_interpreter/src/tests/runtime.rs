@@ -1,5 +1,4 @@
 use super::*;
-use crate::ast::VarAst;
 
 fn run(nodes: Vec<Node>) -> (RuntimeReturn, Runtime) {
     crate::test_log::init_logger();
@@ -33,14 +32,14 @@ fn test_number_and_string_literals() {
 #[test]
 fn test_variable_declaration_and_reference() {
     let nodes = vec![
-        Node::VarDeclare(Box::new(VarAst {
+        Node::VarDeclare{
             name: "x".to_string(),
-            value: Node::NumberLiteral(100),
-        })),
-        Node::VarDeclare(Box::new(VarAst {
+            value: Box::new(Node::NumberLiteral(100)),
+        },
+        Node::VarDeclare{
             name: "y".to_string(),
-            value: Node::VarRef("x".to_string()),
-        })),
+            value: Box::new(Node::VarRef("x".to_string())),
+        },
     ];
 
     let runtime = run!(nodes;Runtime);
@@ -59,10 +58,10 @@ fn test_variable_declaration_and_reference() {
 #[test]
 fn test_variable_reassignment() {
     let nodes = vec![
-        Node::VarDeclare(Box::new(VarAst {
+        Node::VarDeclare{
             name: "x".to_string(),
-            value: Node::NumberLiteral(10),
-        })),
+            value: Box::new(Node::NumberLiteral(10)),
+        },
         Node::VarReasign {
             name: "x".to_string(),
             new_value: Box::new(Node::NumberLiteral(20)),
@@ -86,9 +85,9 @@ fn test_variable_reassignment() {
 
 #[test]
 fn test_math_operations() {
-    let nodes = vec![Node::VarDeclare(Box::new(VarAst {
+    let nodes = vec![Node::VarDeclare{
         name: "result".to_string(),
-        value: Node::Math {
+        value: Box::new(Node::Math {
             left: Box::new(Node::Math {
                 left: Box::new(Node::Math {
                     left: Box::new(Node::NumberLiteral(10)),
@@ -104,8 +103,8 @@ fn test_math_operations() {
                 op: MathSign::Division,
                 right: Box::new(Node::NumberLiteral(2)),
             }),
-        },
-    }))];
+        }),
+    }];
 
     let runtime = run!(nodes;Runtime);
 
@@ -135,14 +134,14 @@ fn test_return_statement() {
 
 #[test]
 fn test_array_literal_evaluation() {
-    let nodes = vec![Node::VarDeclare(Box::new(VarAst {
+    let nodes = vec![Node::VarDeclare{
         name: "arr".to_string(),
-        value: Node::ArrayLiteral(vec![
+        value: Box::new(Node::ArrayLiteral(vec![
             Node::NumberLiteral(1),
             Node::StringLiteral("test".to_string()),
             Node::BoolLiteral(true),
-        ]),
-    }))];
+        ])),
+    }];
 
     let runtime = run!(nodes;Runtime);
 

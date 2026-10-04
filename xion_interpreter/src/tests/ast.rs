@@ -1,9 +1,8 @@
 use crate::{
     ast::{
-        AstBuilder, ClassAst, FnCallAst, FunctionDefAst,
+        AstBuilder,
         MathSign::Multiply,
         Node::{self, StringLiteral, *},
-        VarAst,
     },
     token::Token::{self, *},
 };
@@ -27,10 +26,10 @@ fn var_declaration() {
         SemiColon,
     ]);
     assert_eq!(
-        vec![VarDeclare(Box::new(VarAst {
+        vec![VarDeclare{
             name: "var_name".to_string(),
-            value: Node::NumberLiteral(50)
-        }))],
+            value: Box::new(Node::NumberLiteral(50))
+        }],
         ast
     )
 }
@@ -93,10 +92,10 @@ fn fn_call() {
         SemiColon,
     ]);
     assert_eq!(
-        vec![Node::FnCall(FnCallAst {
+        vec![Node::FnCall{
             name: "foo".to_string(),
-            args: vec![Node::NumberLiteral(5)],
-        })],
+            arguments: vec![Node::NumberLiteral(5)],
+        }],
         ast
     );
 }
@@ -118,11 +117,11 @@ fn fn_declaration() {
         RightBrace,
     ]);
     assert_eq!(
-        vec![Node::FnDeclare(FunctionDefAst {
+        vec![Node::FnDeclare {
             name: "add".to_string(),
-            paramaters: vec!["a".to_string(), "b".to_string()],
+            parameters: vec!["a".to_string(), "b".to_string()],
             body: vec![Node::Return(Some(Box::new(Node::NumberLiteral(42))))],
-        })],
+        }],
         ast
     );
 }
@@ -131,10 +130,10 @@ fn fn_declaration() {
 fn class_declaration() {
     let ast = ast(vec![Class, Name("MyClass"), LeftBrace, RightBrace]);
     assert_eq!(
-        vec![Node::ClassDeclare(ClassAst {
+        vec![Node::ClassDeclare {
             name: "MyClass".to_string(),
-            fields: vec![],
-        })],
+            body: vec![],
+        }],
         ast
     );
 }
@@ -153,13 +152,13 @@ fn class_delcaration_with_variable() {
         RightBrace,
     ]);
     assert_eq!(
-        vec![Node::ClassDeclare(ClassAst {
+        vec![Node::ClassDeclare {
             name: "MyClass".to_string(),
-            fields: vec![VarDeclare(Box::new(VarAst {
+            body: vec![VarDeclare{
                 name: "field".to_string(),
-                value: StringLiteral("hello world".to_string())
-            }))]
-        })],
+                value: Box::new(StringLiteral("hello world".to_string()))
+            }]
+        }],
         ast
     );
 }
@@ -176,13 +175,13 @@ fn class_constructor_with_value() {
         SemiColon,
     ]);
     assert_eq!(
-        vec![FnCall(FnCallAst {
+        vec![FnCall {
             name: "Class".to_string(),
-            args: vec![VarReasign {
+            arguments: vec![VarReasign {
                 name: "x".to_string(),
                 new_value: Box::new(Node::NumberLiteral(50))
             }]
-        })],
+        }],
         ast
     );
 }

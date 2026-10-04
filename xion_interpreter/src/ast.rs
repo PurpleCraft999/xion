@@ -45,12 +45,12 @@ impl AstBuilder {
             return None;
         }
 
-        let fields = self.parse_sequence_of_exprs(LeftBrace, RightBrace, SemiColon)?;
+        let body = self.parse_sequence_of_exprs(LeftBrace, RightBrace, SemiColon)?;
 
-        Some(Node::ClassDeclare(ClassAst {
+        Some(Node::ClassDeclare{
             name: class_name,
-            fields,
-        }))
+            body,
+        })
     }
     fn parse_var(&mut self) -> Option<Node> {
         self.consume_if(|t| t == &Let);
@@ -65,7 +65,7 @@ impl AstBuilder {
         let next = self.next()?;
         let value = self.parse_expr(next, &SemiColon)?;
 
-        Some(Node::VarDeclare(Box::new(VarAst { name, value })))
+        Some(Node::VarDeclare{name,value:Box::new(value)})
     }
     fn parse_expr<'expr, E>(&mut self, token: Token, end_token: &'expr E) -> Option<Node>
     where
@@ -188,11 +188,11 @@ impl AstBuilder {
             break;
         }
 
-        Some(Node::FnDeclare(FunctionDefAst {
+        Some(Node::FnDeclare {
             name,
-            paramaters: params,
+            parameters:params,
             body: self.parse_scope()?,
-        }))
+        })
     }
     fn parse_scope(&mut self) -> Option<Vec<Node>> {
         self.parse_sequence_of_exprs(LeftBrace, RightBrace, SemiColon)
@@ -203,7 +203,7 @@ impl AstBuilder {
             Some(LeftParen) => {
                 let args = self.parse_args()?;
 
-                Some(Node::FnCall(FnCallAst { name, args }))
+                Some(Node::FnCall{ name,arguments: args })
             }
             Some(Equals) => {
                 self.next();
@@ -286,21 +286,34 @@ impl AstBuilder {
 #[derive(Debug, Clone)]
 #[cfg_attr(test, derive(PartialEq))]
 pub enum Node {
-    ClassDeclare(ClassAst),
-    VarDeclare(Box<VarAst>),
+    ClassDeclare{
+        name:String,
+        body:Vec<Node>
+    },
+    VarDeclare{
+        name:String,
+        value:Box<Node>,
+    },
     StringLiteral(String),
     NumberLiteral(i64),
     BoolLiteral(bool),
     ArrayLiteral(Vec<Node>),
     ///name of var
     VarRef(String),
-    FnCall(FnCallAst),
+    FnCall{
+        name:String,
+        arguments:Vec<Node>
+    },
     VarReasign {
         name: String,
         new_value: Box<Node>,
     },
 
-    FnDeclare(FunctionDefAst),
+    FnDeclare{
+        name:String,
+        parameters:Vec<String>,
+        body:Vec<Node>,
+    },
     Return(Option<Box<Node>>),
 
     Math {
@@ -331,34 +344,6 @@ pub enum MathSign {
     Minus,
     Multiply,
     Division,
-}
-
-#[derive(Debug, Clone)]
-#[cfg_attr(test, derive(PartialEq))]
-pub struct ClassAst {
-    pub name: String,
-    pub fields: Vec<Node>,
-}
-
-#[derive(Debug, Clone)]
-#[cfg_attr(test, derive(PartialEq))]
-pub struct VarAst {
-    pub name: String,
-    pub value: Node,
-}
-#[derive(Debug, Clone)]
-#[cfg_attr(test, derive(PartialEq))]
-pub struct FnCallAst {
-    pub name: String,
-    pub args: Vec<Node>,
-}
-
-#[derive(Debug, Clone)]
-#[cfg_attr(test, derive(PartialEq))]
-pub struct FunctionDefAst {
-    pub name: String,
-    pub paramaters: Vec<String>,
-    pub body: Vec<Node>,
 }
 ///based on https://github.com/jdvillal/parser
 mod pratt_parser {

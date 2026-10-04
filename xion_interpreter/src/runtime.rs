@@ -46,12 +46,12 @@ impl Runtime {
 
     fn eval(&mut self, node: Node) -> RuntimeReturn {
         match node {
-            VarDeclare(var_ast) => {
+            VarDeclare{name,value} => {
                 let value = self
-                    .eval(var_ast.value)?
+                    .eval(*value)?
                     .ok_or(RuntimeError::RequireValue)?;
                 self.get_current_scope_mut()
-                    .add_var(var_ast.name.clone(), Variable::new(value))?;
+                    .add_var(name.clone(), Variable::new(value))?;
                 Ok(None)
             }
             StringLiteral(str) => Ok(Some(Value::String(str))),
@@ -76,27 +76,27 @@ impl Runtime {
             }
             NumberLiteral(num) => Ok(Some(Value::Number(num))),
 
-            FnCall(func_ast) => {
+            FnCall{name,arguments} => {
                 let Some(func) = self
                     .get_current_scope()
-                    .with_function(&func_ast.name, |func| func.clone())
+                    .with_function(&name, |func| func.clone())
                 else {
                     return Err(DoesNotExist(format!(
                         "cannot call function \"{}\"",
-                        func_ast.name
+                        name
                     )));
                 };
 
                 //class constructor
                 match func {
                     Function::Native(_) => {
-                        if let Some(class) = self.get_current_scope().get_class(&func_ast.name) {
+                        if let Some(class) = self.get_current_scope().get_class(&name) {
                             debug!("instantiating class {class:?}");
                             let mut instance = class.instantiate();
                             let mut scope = self.child_scope();
                             scope.vars = class.fields.clone();
                             // should run any VarAssigns for the class
-                            let mut runtime = Runtime::with_scope_and_nodes(func_ast.args, scope);
+                            let mut runtime = Runtime::with_scope_and_nodes(arguments, scope);
                             runtime.run()?;
                             instance.set_fields(runtime.current_scope.vars);
 
@@ -107,8 +107,7 @@ impl Runtime {
                 }
 
                 //evaluates any variable names and the like
-                let args = func_ast.args;
-                let arguments = self.eval_list(args)?;
+                let arguments = self.eval_list(arguments)?;
 
                 func.call(arguments, self.child_scoped_no_var())
             }
@@ -198,34 +197,34 @@ impl Runtime {
                     })
                     .flatten())
             }
-            ClassDeclare(_) | FnDeclare(_) | Import(_) => Ok(None),
+            ClassDeclare{..}| FnDeclare{..} | Import(_) => Ok(None),
         }
     }
     fn early_eval(&mut self, node: Node) -> RuntimeReturn {
         match node {
-            ClassDeclare(class) => {
+            ClassDeclare{name,body} => {
                 //TODO: In the future this scope should be only globals,consts, and the like and not completly empty
                 let mut runtime =
-                    Runtime::with_scope_and_nodes(class.fields, self.child_scoped_no_var());
+                    Runtime::with_scope_and_nodes(body, self.child_scoped_no_var());
                 runtime.run()?;
 
                 let runtime_class = RuntimeClass {
-                    name: class.name.clone(),
+                    name: name.clone(),
                     fields: runtime.current_scope.vars,
                     methods: runtime.current_scope.functions,
                 };
                 self.get_current_scope_mut().add_class(runtime_class)?;
 
                 self.get_current_scope_mut()
-                    .add_native_fn(&class.name, xion_std::instantiate)?;
+                    .add_native_fn(&name, xion_std::instantiate)?;
                 Ok(None)
             }
-            FnDeclare(func) => {
+            FnDeclare{name,parameters,body} => {
                 self.get_current_scope_mut()
                     .add_func(NonNativeFunction::new(
-                        func.name.clone(),
-                        func.paramaters,
-                        func.body,
+                        name.clone(),
+                        parameters,
+                        body,
                     ))?;
                 Ok(None)
             }
@@ -279,7 +278,7 @@ impl Runtime {
             .nodes
             .clone()
             .into_iter()
-            .filter(|n| matches!(n, FnDeclare(_) | ClassDeclare(_) | Import(_)))
+            .filter(|n| matches!(n, FnDeclare{..} | ClassDeclare{..} | Import(_)))
         {
             self.early_eval(node)
                 .map_err(|e| RuntimeError::Other(format!("error during early eval: {e}")))?;

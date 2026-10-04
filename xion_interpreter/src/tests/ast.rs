@@ -26,7 +26,7 @@ fn var_declaration() {
         SemiColon,
     ]);
     assert_eq!(
-        vec![VarDeclare{
+        vec![VarDeclare {
             name: "var_name".to_string(),
             value: Box::new(Node::NumberLiteral(50))
         }],
@@ -92,7 +92,7 @@ fn fn_call() {
         SemiColon,
     ]);
     assert_eq!(
-        vec![Node::FnCall{
+        vec![Node::FnCall {
             name: "foo".to_string(),
             arguments: vec![Node::NumberLiteral(5)],
         }],
@@ -154,7 +154,7 @@ fn class_delcaration_with_variable() {
     assert_eq!(
         vec![Node::ClassDeclare {
             name: "MyClass".to_string(),
-            body: vec![VarDeclare{
+            body: vec![VarDeclare {
                 name: "field".to_string(),
                 value: Box::new(StringLiteral("hello world".to_string()))
             }]

@@ -1,6 +1,6 @@
 use crate::{
-    ast::Node,
     Value,
+    ast::Node,
     runtime::{Runtime, Scope, Variable},
 };
 

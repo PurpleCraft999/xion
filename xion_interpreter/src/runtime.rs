@@ -3,7 +3,7 @@ use std::fmt::{Debug, Display};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use log::{debug, error, info, warn};
+use log::{debug, error, warn};
 
 use crate::ast::Node::*;
 use crate::ast::{MathSign, Node};
@@ -85,36 +85,35 @@ impl Runtime {
                 match func {
                     Function::Native(_) => {
                         if let Some(class) = self.get_current_scope().get_class(&name) {
-                            const INJECTED_VAR_NAME:&str = "@from_constructor";
+                            const INJECTED_VAR_NAME: &str = "@from_constructor";
                             debug!("instantiating class {class:?}");
                             let mut instance = class.instantiate();
                             let mut scope = self.child_scope();
 
-                            scope.parent_scope = if let ParentScope::Normal(n) =
-                                scope.parent_scope.as_ref().expect("we declared a child scope")
+                            scope.parent_scope = if let ParentScope::Normal(n) = scope
+                                .parent_scope
+                                .as_ref()
+                                .expect("we declared a child scope")
                             {
-                                Some(ParentScope::Normal(Box::new(Scope { vars: n.vars.clone()
-                                    .into_iter()
-                                    .map(|(k, v)| (k + INJECTED_VAR_NAME, v))
-                                    .collect(),..Default::default() })))
-                                
-                                
+                                Some(ParentScope::Normal(Box::new(Scope {
+                                    vars: n
+                                        .vars
+                                        .clone()
+                                        .into_iter()
+                                        .map(|(k, v)| (k + INJECTED_VAR_NAME, v))
+                                        .collect(),
+                                    ..Default::default()
+                                })))
                             } else {
                                 error!("child scope does not have parent");
                                 None
                             };
                             let mut arguments = arguments;
-                            for argument in &mut arguments{
-                                match argument{
-                                    Node::VarReasign{new_value,..}=>{
-                                        
-                                    match &mut **new_value{
-                                        Node::VarRef(name)=>*name+=INJECTED_VAR_NAME,
-                                        _=>()
-                                    }
-                                    
-                                }
-                                _=>(),
+                            for argument in &mut arguments {
+                                if let Node::VarReasign {  new_value,.. } = argument && let Node::VarRef(name) = &mut **new_value{
+
+                                        *name += INJECTED_VAR_NAME
+
                                 }
                             }
                             // //

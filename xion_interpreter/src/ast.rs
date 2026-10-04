@@ -47,7 +47,7 @@ impl AstBuilder {
 
         let body = self.parse_sequence_of_exprs(LeftBrace, RightBrace, SemiColon)?;
 
-        Some(Node::ClassDeclare{
+        Some(Node::ClassDeclare {
             name: class_name,
             body,
         })
@@ -65,7 +65,10 @@ impl AstBuilder {
         let next = self.next()?;
         let value = self.parse_expr(next, &SemiColon)?;
 
-        Some(Node::VarDeclare{name,value:Box::new(value)})
+        Some(Node::VarDeclare {
+            name,
+            value: Box::new(value),
+        })
     }
     fn parse_expr<'expr, E>(&mut self, token: Token, end_token: &'expr E) -> Option<Node>
     where
@@ -190,7 +193,7 @@ impl AstBuilder {
 
         Some(Node::FnDeclare {
             name,
-            parameters:params,
+            parameters: params,
             body: self.parse_scope()?,
         })
     }
@@ -203,7 +206,10 @@ impl AstBuilder {
             Some(LeftParen) => {
                 let args = self.parse_args()?;
 
-                Some(Node::FnCall{ name,arguments: args })
+                Some(Node::FnCall {
+                    name,
+                    arguments: args,
+                })
             }
             Some(Equals) => {
                 self.next();
@@ -286,13 +292,13 @@ impl AstBuilder {
 #[derive(Debug, Clone)]
 #[cfg_attr(test, derive(PartialEq))]
 pub enum Node {
-    ClassDeclare{
-        name:String,
-        body:Vec<Node>
+    ClassDeclare {
+        name: String,
+        body: Vec<Node>,
     },
-    VarDeclare{
-        name:String,
-        value:Box<Node>,
+    VarDeclare {
+        name: String,
+        value: Box<Node>,
     },
     StringLiteral(String),
     NumberLiteral(i64),
@@ -300,19 +306,19 @@ pub enum Node {
     ArrayLiteral(Vec<Node>),
     ///name of var
     VarRef(String),
-    FnCall{
-        name:String,
-        arguments:Vec<Node>
+    FnCall {
+        name: String,
+        arguments: Vec<Node>,
     },
     VarReasign {
         name: String,
         new_value: Box<Node>,
     },
 
-    FnDeclare{
-        name:String,
-        parameters:Vec<String>,
-        body:Vec<Node>,
+    FnDeclare {
+        name: String,
+        parameters: Vec<String>,
+        body: Vec<Node>,
     },
     Return(Option<Box<Node>>),
 

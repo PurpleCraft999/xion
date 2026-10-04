@@ -32,11 +32,11 @@ fn test_number_and_string_literals() {
 #[test]
 fn test_variable_declaration_and_reference() {
     let nodes = vec![
-        Node::VarDeclare{
+        Node::VarDeclare {
             name: "x".to_string(),
             value: Box::new(Node::NumberLiteral(100)),
         },
-        Node::VarDeclare{
+        Node::VarDeclare {
             name: "y".to_string(),
             value: Box::new(Node::VarRef("x".to_string())),
         },
@@ -58,7 +58,7 @@ fn test_variable_declaration_and_reference() {
 #[test]
 fn test_variable_reassignment() {
     let nodes = vec![
-        Node::VarDeclare{
+        Node::VarDeclare {
             name: "x".to_string(),
             value: Box::new(Node::NumberLiteral(10)),
         },
@@ -85,7 +85,7 @@ fn test_variable_reassignment() {
 
 #[test]
 fn test_math_operations() {
-    let nodes = vec![Node::VarDeclare{
+    let nodes = vec![Node::VarDeclare {
         name: "result".to_string(),
         value: Box::new(Node::Math {
             left: Box::new(Node::Math {
@@ -134,7 +134,7 @@ fn test_return_statement() {
 
 #[test]
 fn test_array_literal_evaluation() {
-    let nodes = vec![Node::VarDeclare{
+    let nodes = vec![Node::VarDeclare {
         name: "arr".to_string(),
         value: Box::new(Node::ArrayLiteral(vec![
             Node::NumberLiteral(1),

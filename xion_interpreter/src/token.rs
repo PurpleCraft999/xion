@@ -133,13 +133,9 @@ pub enum Token {
     Division,
     Dot,
     Import,
+
     If,
     IsEq,
-
-
-
-
-    
 }
 
 impl Token {

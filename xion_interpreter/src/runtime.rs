@@ -165,11 +165,6 @@ impl Runtime {
                     };
                     value.map(Some).map_err(RuntimeError::MathError)
                 }
-
-
-
-
-                
             }
             ArrayLiteral(vec) => Ok(Some(Value::Array(self.eval_list(vec)?))),
             MethodCall {

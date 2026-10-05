@@ -291,12 +291,6 @@ impl Runtime {
     fn child_scope(&self) -> Scope {
         Scope::with_parent(self.get_current_scope().clone())
     }
-    // fn chlid_scope_mut(&mut self)->Scope{
-    //         let scope = self.get_current_scope_mut();
-    //         let scope = Arc::new(Mutex::new(scope));
-
-    //         Scope::with_mutable_parent(scope)
-    // }
     fn child_scoped_no_var(&self) -> Scope {
         let scope = {
             let mut scope = self.get_current_scope().clone();
@@ -458,7 +452,7 @@ impl Value {
     fn to_bool(&self) -> Option<bool> {
         match self {
             Self::Bool(bool) => Some(*bool),
-            Self::Number(num) => Some(*num!=0),
+            Self::Number(num) => Some(*num != 0),
 
             _ => None,
         }

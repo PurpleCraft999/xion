@@ -3,10 +3,10 @@ escape codes for strings
 add module testing
 
 consider merging two arrays with +
-if statements
 while loops
 for loops
 better functions
 conversion functions for types
 add floats
 add std objects
+better ast error handling

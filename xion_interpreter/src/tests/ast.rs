@@ -242,3 +242,75 @@ fn make_number_negative_during_math_equasion() {
         ast
     )
 }
+
+#[test]
+fn if_statment() {
+    let ast = ast(vec![
+        If,
+        True,
+        LeftBrace,
+        Let,
+        Name("x"),
+        Equals,
+        False,
+        SemiColon,
+        RightBrace,
+    ]);
+    assert_eq!(
+        vec![Node::If {
+            condition: Box::new(Node::BoolLiteral(true)),
+            body: vec![Node::VarDeclare {
+                name: "x".to_string(),
+                value: Box::new(BoolLiteral(false))
+            }]
+        }],
+        ast
+    );
+}
+
+#[test]
+fn is_equal() {
+    let ast = ast(vec![
+        Token::NumberLiteral(5),
+        IsEq,
+        Token::NumberLiteral(5),
+        SemiColon,
+    ]);
+    assert_eq!(
+        vec![IsEqual {
+            left: Box::new(Node::NumberLiteral(5)),
+            right: Box::new(Node::NumberLiteral(5))
+        }],
+        ast
+    )
+}
+
+#[test]
+fn more_math() {
+    let ast = ast(vec![
+        Token::NumberLiteral(5),
+        Plus,
+        Token::NumberLiteral(3),
+        Asterisk,
+        Token::NumberLiteral(3),
+        SemiColon,
+    ]);
+    assert_eq!(
+        vec![Math {
+            left: Box::new(Node::NumberLiteral(5)),
+            op: crate::ast::MathSign::Plus,
+            right: Box::new(Math {
+                left: Box::new(Node::NumberLiteral(3)),
+                op: Multiply,
+                right: Box::new(Node::NumberLiteral(3))
+            })
+        }],
+        ast
+    )
+}
+
+#[test]
+fn parse_import() {
+    let ast = ast(vec![Token::Import, Name("module"), SemiColon]);
+    assert_eq!(vec![Node::Import("module".to_string())], ast);
+}

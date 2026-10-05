@@ -28,72 +28,78 @@ impl AstBuilder {
         self.tokens.next_if(c).is_some()
     }
 
-    fn next_if_name(&mut self) -> Option<String> {
-        self.tokens.next_if_map(|t| match t {
-            Token::Name(s) => Ok(s),
-            _ => Err(t),
-        })
+    fn next_if_name(&mut self) -> Result<String, AstError> {
+        self.tokens
+            .next_if_map(|t| match t {
+                Token::Name(s) => Ok(s),
+                _ => Err(t),
+            })
+            .ok_or(AstError::UnexpectedToken)
     }
-    fn parse_class(&mut self) -> Option<Node> {
+    fn parse_class(&mut self) -> Result<Node, AstError> {
         self.consume_if(|t| t == &Class);
-        let Some(class_name) = self.next_if_name() else {
+        let Ok(class_name) = self.next_if_name() else {
             error!("token sould be name");
-            return None;
+            return Err(AstError::UnexpectedToken);
         };
         if self.peek() != Some(&LeftBrace) {
             error!("next token was not left brace");
-            return None;
+            return Err(AstError::UnexpectedToken);
         }
 
         let body = self.parse_sequence_of_exprs(LeftBrace, RightBrace, SemiColon)?;
 
-        Some(Node::ClassDeclare {
+        Ok(Node::ClassDeclare {
             name: class_name,
             body,
         })
     }
-    fn parse_var(&mut self) -> Option<Node> {
+    fn parse_var(&mut self) -> Result<Node, AstError> {
         self.consume_if(|t| t == &Let);
-        let Some(name) = self.next_if_name() else {
+        let Ok(name) = self.next_if_name() else {
             error!("no name after let");
-            return None;
+            return Err(AstError::SyntaxError {
+                _kind: SyntaxError::NoName,
+            });
         };
         if !self.consume_if(|t| t == &Equals) {
             error!("not equals after var name");
-            return None;
+            return Err(AstError::UnexpectedToken);
         }
         let value = self.parse_next_expr(&SemiColon)?;
 
-        Some(Node::VarDeclare {
+        Ok(Node::VarDeclare {
             name,
             value: Box::new(value),
         })
     }
-    fn parse_expr<'expr, E>(&mut self, token: Token, end_token: &'expr E) -> Option<Node>
+    fn parse_expr<'expr, E>(&mut self, token: Token, end_token: &'expr E) -> Result<Node, AstError>
     where
         E: Into<Option<Token>>,
         Option<&'expr Token>: From<&'expr E>,
     {
-        let node = match token {
+        let node: Result<Node, AstError> = match token {
             NumberLiteral(_) | Name(_) | StringLiteral(_) | LeftParen | Minus => {
                 pratt_parser::parse_expression(self, 0, token, end_token.into())
             }
             Return => {
                 let return_value = self.parse_next_expr::<Option<Token>>(&None).map(Box::new);
-
-                Some(Node::Return(return_value))
+                match return_value {
+                    Ok(s) => Ok(Node::Return(Some(s))),
+                    Err(e) => Err(e),
+                }
             }
             Import => self.parse_import(),
             If => self.parse_if_statement(),
             LeftBracket => self.parse_array(),
             Let => self.parse_var(),
             Fn => self.parse_function(),
-            True => Some(Node::BoolLiteral(true)),
-            False => Some(Node::BoolLiteral(false)),
+            True => Ok(Node::BoolLiteral(true)),
+            False => Ok(Node::BoolLiteral(false)),
             LeftBrace | RightBrace | RightParen | SemiColon | Comma | Colon | WhiteSpace
             | Equals | EOF | Class | Plus | Asterisk | RightBracket | Division | Dot | IsEq => {
                 error!("unexpected token while parsing expresion: {:?}", token);
-                None
+                Err(AstError::UnexpectedToken)
             }
         };
         let end_token: Option<&Token> = end_token.into();
@@ -111,7 +117,7 @@ impl AstBuilder {
                 "No end was specified".to_string()
             };
             error!("no {end} after expresion {node:?}");
-            None
+            Err(AstError::InvalidExprEnd)
         }
     }
 
@@ -120,7 +126,7 @@ impl AstBuilder {
         start: Token,
         end: Token,
         sep: Token,
-    ) -> Option<Vec<Node>> {
+    ) -> Result<Vec<Node>, AstError> {
         let mut args = Vec::new();
         if !self.consume_if(|t| t == &start) {
             warn!("List does not start with token: {start:?}");
@@ -131,59 +137,56 @@ impl AstBuilder {
                 break;
             }
 
-            if let Some(expr) = self.parse_expr(token, &None) {
-                args.push(expr);
-            } else {
-                error!("list parse error");
-                return None;
-            }
+            let expr = self.parse_expr(token, &None)?;
+            args.push(expr);
+
             if self.consume_if(|t| t == &sep) {
                 continue;
             }
         }
 
-        Some(args)
+        Ok(args)
     }
 
-    fn parse_next_expr<'expr, E>(&mut self, end: &'expr E) -> Option<Node>
+    fn parse_next_expr<'expr, E>(&mut self, end: &'expr E) -> Result<Node, AstError>
     where
         E: Into<Option<Token>>,
         Option<&'expr Token>: From<&'expr E>,
     {
-        let next = self.next()?;
+        let next = self.next().ok_or(AstError::NoNextToken)?;
         self.parse_expr(next, end)
     }
 
-    fn parse_args(&mut self) -> Option<Vec<Node>> {
+    fn parse_args(&mut self) -> Result<Vec<Node>, AstError> {
         self.parse_sequence_of_exprs(LeftParen, RightParen, Comma)
     }
-    fn parse_if_statement(&mut self) -> Option<Node> {
+    fn parse_if_statement(&mut self) -> Result<Node, AstError> {
         self.consume_if(|t| t == &If);
         let con = self.parse_next_expr(&LeftBrace)?;
         let body = self.parse_scope()?;
-        Some(Node::If {
+        Ok(Node::If {
             condition: Box::new(con),
             body,
         })
     }
-    fn parse_array(&mut self) -> Option<Node> {
-        Some(Node::ArrayLiteral(self.parse_sequence_of_exprs(
+    fn parse_array(&mut self) -> Result<Node, AstError> {
+        Ok(Node::ArrayLiteral(self.parse_sequence_of_exprs(
             LeftBracket,
             RightBracket,
             Comma,
         )?))
     }
-    fn parse_import(&mut self) -> Option<Node> {
+    fn parse_import(&mut self) -> Result<Node, AstError> {
         let name = self.next_if_name()?;
-        Some(Node::Import(name))
+        Ok(Node::Import(name))
     }
 
-    fn parse_function(&mut self) -> Option<Node> {
+    fn parse_function(&mut self) -> Result<Node, AstError> {
         self.consume_if(|t| t == &Fn);
         let name = self.next_if_name()?;
         if !self.consume_if(|t| t == &LeftParen) {
             error!("no left paren after function name");
-            return None;
+            return Err(AstError::UnexpectedToken);
         }
         let mut params = Vec::new();
 
@@ -203,29 +206,29 @@ impl AstBuilder {
             break;
         }
 
-        Some(Node::FnDeclare {
+        Ok(Node::FnDeclare {
             name,
             parameters: params,
             body: self.parse_scope()?,
         })
     }
-    fn parse_scope(&mut self) -> Option<Vec<Node>> {
+    fn parse_scope(&mut self) -> Result<Vec<Node>, AstError> {
         self.parse_sequence_of_exprs(LeftBrace, RightBrace, SemiColon)
     }
-    fn parse_name(&mut self, name: String) -> Option<Node> {
+    fn parse_name(&mut self, name: String) -> Result<Node, AstError> {
         let peeked = self.peek();
         match peeked {
             Some(LeftParen) => {
                 let args = self.parse_args()?;
 
-                Some(Node::FnCall {
+                Ok(Node::FnCall {
                     name,
                     arguments: args,
                 })
             }
             Some(Equals) => {
                 self.next();
-                Some(Node::VarReasign {
+                Ok(Node::VarReasign {
                     name,
                     new_value: Box::new(self.parse_next_expr(&None)?),
                 })
@@ -234,7 +237,7 @@ impl AstBuilder {
             Some(Colon) => {
                 self.next();
 
-                Some(Node::VarReasign {
+                Ok(Node::VarReasign {
                     name,
                     new_value: Box::new(self.parse_next_expr(&None)?),
                 })
@@ -246,7 +249,7 @@ impl AstBuilder {
                 match peeked {
                     Some(LeftParen) => {
                         let args = self.parse_args()?;
-                        Some(Node::MethodCall {
+                        Ok(Node::MethodCall {
                             var_name: name,
                             method_name: accessed_name,
                             args,
@@ -254,19 +257,19 @@ impl AstBuilder {
                     }
                     Some(Equals) => {
                         self.next();
-                        Some(Node::FieldReasign {
+                        Ok(Node::FieldReasign {
                             var_name: name,
                             field_name: accessed_name,
                             new_value: Box::new(self.parse_next_expr(&None)?),
                         })
                     }
-                    _ => Some(Node::FieldAccess {
+                    _ => Ok(Node::FieldAccess {
                         var_name: name,
                         field_name: accessed_name,
                     }),
                 }
             }
-            _ => Some(Node::VarRef(name)),
+            _ => Ok(Node::VarRef(name)),
         }
     }
 
@@ -284,7 +287,7 @@ impl AstBuilder {
 
                 _ => self.parse_next_expr(&SemiColon),
             };
-            if let Some(node) = node {
+            if let Ok(node) = node {
                 self.tree.push(node);
             } else {
                 error!("Some error occured");
@@ -298,6 +301,17 @@ impl AstBuilder {
 
         self.tree
     }
+}
+#[derive(Debug)]
+enum AstError {
+    InvalidExprEnd,
+    UnexpectedToken,
+    NoNextToken,
+    SyntaxError { _kind: SyntaxError },
+}
+#[derive(Debug)]
+enum SyntaxError {
+    NoName,
 }
 
 #[derive(Debug, Clone)]
@@ -376,7 +390,7 @@ mod pratt_parser {
 
     use super::Node;
     use crate::{
-        ast::{AstBuilder, MathSign},
+        ast::{AstBuilder, AstError, MathSign},
         token::Token::{self},
     };
 
@@ -392,21 +406,22 @@ mod pratt_parser {
         min_bp: u8,
         start: Token,
         end_token: Option<&Token>,
-    ) -> Option<super::Node> {
+    ) -> Result<Node, AstError> {
         let mut lhs = match start {
             Token::Name(it) => lexer.parse_name(it)?,
             Token::LeftParen => {
-                let next = lexer.next()?;
+                let next = lexer.next().ok_or(AstError::NoNextToken)?;
                 let lhs = parse_expression(lexer, 0, next, end_token);
                 if !lexer.consume_if(|t| t == &Token::RightParen) {
                     error!("no closing paran");
+                    return Err(AstError::UnexpectedToken);
                 }
                 lhs?
             }
             Token::RightParen => {
                 error!("start was a )");
 
-                return None;
+                return Err(AstError::UnexpectedToken);
             }
             Token::NumberLiteral(num) => super::Node::NumberLiteral(num),
             Token::StringLiteral(string) => super::Node::StringLiteral(string),
@@ -416,11 +431,11 @@ mod pratt_parser {
                     lexer.next();
                     super::Node::NumberLiteral(num)
                 }
-                _ => return None,
+                _ => return Err(AstError::UnexpectedToken),
             },
             t => {
                 error!("bad token: {:?}", t);
-                return None;
+                return Err(AstError::UnexpectedToken);
             }
         };
         loop {
@@ -444,15 +459,15 @@ mod pratt_parser {
                 Some(Token::Division) => MathSign::Division,
                 Some(Token::IsEq) => {
                     lexer.next();
-                    let next = lexer.next()?;
-                    return Some(Node::IsEqual {
+                    let next = lexer.next().ok_or(AstError::NoNextToken)?;
+                    return Ok(Node::IsEqual {
                         left: Box::new(lhs),
                         right: Box::new(parse_expression(lexer, 0, next, end_token)?),
                     });
                 }
                 Some(t) => {
                     error!("unexpeced operator: {:?}", t);
-                    return None;
+                    return Err(AstError::UnexpectedToken);
                     // break;
                 }
             };
@@ -462,7 +477,7 @@ mod pratt_parser {
             }
 
             lexer.next();
-            let next = lexer.next()?;
+            let next = lexer.next().ok_or(AstError::NoNextToken)?;
             let rhs = parse_expression(lexer, r_bp, next, end_token)?;
             lhs = super::Node::Math {
                 left: Box::new(lhs),
@@ -470,7 +485,7 @@ mod pratt_parser {
                 right: Box::new(rhs),
             };
         }
-        Some(lhs)
+        Ok(lhs)
     }
 }
 #[cfg(test)]

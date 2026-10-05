@@ -62,8 +62,7 @@ impl AstBuilder {
             error!("not equals after var name");
             return None;
         }
-        let next = self.next()?;
-        let value = self.parse_expr(next, &SemiColon)?;
+        let value = self.parse_next_expr(&SemiColon)?;
 
         Some(Node::VarDeclare {
             name,
@@ -80,24 +79,19 @@ impl AstBuilder {
                 pratt_parser::parse_expression(self, 0, token, end_token.into())
             }
             Return => {
-                let token = self.next();
-                let return_value = if let Some(value) = token {
-                    self.parse_expr::<Option<Token>>(value, &None).map(Box::new)
-                } else {
-                    None
-                };
+                let return_value = self.parse_next_expr::<Option<Token>>(&None).map(Box::new);
 
                 Some(Node::Return(return_value))
             }
             Import => self.parse_import(),
-            If=>self.parse_if_statement(),
+            If => self.parse_if_statement(),
             LeftBracket => self.parse_array(),
             Let => self.parse_var(),
             Fn => self.parse_function(),
             True => Some(Node::BoolLiteral(true)),
             False => Some(Node::BoolLiteral(false)),
             LeftBrace | RightBrace | RightParen | SemiColon | Comma | Colon | WhiteSpace
-            | Equals | EOF | Class | Plus | Asterisk | RightBracket | Division | Dot => {
+            | Equals | EOF | Class | Plus | Asterisk | RightBracket | Division | Dot | IsEq => {
                 error!("unexpected token while parsing expresion: {:?}", token);
                 None
             }
@@ -151,16 +145,26 @@ impl AstBuilder {
         Some(args)
     }
 
+    fn parse_next_expr<'expr, E>(&mut self, end: &'expr E) -> Option<Node>
+    where
+        E: Into<Option<Token>>,
+        Option<&'expr Token>: From<&'expr E>,
+    {
+        let next = self.next()?;
+        self.parse_expr(next, end)
+    }
+
     fn parse_args(&mut self) -> Option<Vec<Node>> {
         self.parse_sequence_of_exprs(LeftParen, RightParen, Comma)
     }
-    fn parse_if_statement(&mut self)->Option<Node>{
-        self.consume_if(|t|t==&If);
-        let next = self.next()?;
-        let con =self.parse_expr(next, &LeftBrace)?;
+    fn parse_if_statement(&mut self) -> Option<Node> {
+        self.consume_if(|t| t == &If);
+        let con = self.parse_next_expr(&LeftBrace)?;
         let body = self.parse_scope()?;
-        Some(Node::If { condition:Box::new(con) , body })
-        
+        Some(Node::If {
+            condition: Box::new(con),
+            body,
+        })
     }
     fn parse_array(&mut self) -> Option<Node> {
         Some(Node::ArrayLiteral(self.parse_sequence_of_exprs(
@@ -221,20 +225,18 @@ impl AstBuilder {
             }
             Some(Equals) => {
                 self.next();
-                let new_value = self.next()?;
                 Some(Node::VarReasign {
                     name,
-                    new_value: Box::new(self.parse_expr(new_value, &None)?),
+                    new_value: Box::new(self.parse_next_expr(&None)?),
                 })
             }
             //this branch is for assigning instance vars
             Some(Colon) => {
                 self.next();
-                let new_value = self.next()?;
 
                 Some(Node::VarReasign {
                     name,
-                    new_value: Box::new(self.parse_expr(new_value, &None)?),
+                    new_value: Box::new(self.parse_next_expr(&None)?),
                 })
             }
             Some(Dot) => {
@@ -252,11 +254,10 @@ impl AstBuilder {
                     }
                     Some(Equals) => {
                         self.next();
-                        let value = self.next()?;
                         Some(Node::FieldReasign {
                             var_name: name,
                             field_name: accessed_name,
-                            new_value: Box::new(self.parse_expr(value, &None)?),
+                            new_value: Box::new(self.parse_next_expr(&None)?),
                         })
                     }
                     _ => Some(Node::FieldAccess {
@@ -279,15 +280,16 @@ impl AstBuilder {
                 Fn => self.parse_function(),
 
                 EOF => break,
-                If=>self.parse_if_statement(),
+                If => self.parse_if_statement(),
 
-                _ => {
-                    let next = self.next().expect("we already peeked");
-                    self.parse_expr(next, &SemiColon)
-                }
+                _ => self.parse_next_expr(&SemiColon),
             };
             if let Some(node) = node {
                 self.tree.push(node);
+            } else {
+                error!("Some error occured");
+
+                return Vec::new();
             }
 
             debug!("tokens: {:?}", self.tokens);
@@ -351,10 +353,14 @@ pub enum Node {
         new_value: Box<Node>,
     },
     Import(String),
-    If{
-        condition:Box<Node>,
-        body:Vec<Node>,
-    }
+    If {
+        condition: Box<Node>,
+        body: Vec<Node>,
+    },
+    IsEqual {
+        left: Box<Node>,
+        right: Box<Node>,
+    },
 }
 #[derive(Debug, Clone)]
 #[cfg_attr(test, derive(PartialEq))]
@@ -366,8 +372,9 @@ pub enum MathSign {
 }
 ///based on https://github.com/jdvillal/parser
 mod pratt_parser {
-    use log::{debug, error, warn};
+    use log::{debug, error};
 
+    use super::Node;
     use crate::{
         ast::{AstBuilder, MathSign},
         token::Token::{self},
@@ -435,10 +442,18 @@ mod pratt_parser {
                 Some(Token::Minus) => MathSign::Minus,
                 Some(Token::Asterisk) => MathSign::Multiply,
                 Some(Token::Division) => MathSign::Division,
-
+                Some(Token::IsEq) => {
+                    lexer.next();
+                    let next = lexer.next()?;
+                    return Some(Node::IsEqual {
+                        left: Box::new(lhs),
+                        right: Box::new(parse_expression(lexer, 0, next, end_token)?),
+                    });
+                }
                 Some(t) => {
-                    warn!("unexpeced operator: {:?}", t);
-                    break;
+                    error!("unexpeced operator: {:?}", t);
+                    return None;
+                    // break;
                 }
             };
             let (l_bp, r_bp) = infix_binding_power(&op);

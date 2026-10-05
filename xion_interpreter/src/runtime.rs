@@ -110,10 +110,10 @@ impl Runtime {
                             };
                             let mut arguments = arguments;
                             for argument in &mut arguments {
-                                if let Node::VarReasign {  new_value,.. } = argument && let Node::VarRef(name) = &mut **new_value{
-
-                                        *name += INJECTED_VAR_NAME
-
+                                if let Node::VarReasign { new_value, .. } = argument
+                                    && let Node::VarRef(name) = &mut **new_value
+                                {
+                                    *name += INJECTED_VAR_NAME
                                 }
                             }
                             // //
@@ -222,26 +222,32 @@ impl Runtime {
                     })
                     .flatten())
             }
-            If { condition, body }=>{
+            If { condition, body } => {
                 let condition = self.eval(*condition)?.ok_or(RuntimeError::RequireValue)?;
-                if let Some(b) =  condition.to_bool(){
-                    if b{
-                        // self.eval_list(body)?;
+                if let Some(b) = condition.to_bool() {
+                    if b {
                         let current_scope = Arc::new(Mutex::new(self.get_current_scope().clone()));
                         let run_scope = Scope::with_mutable_parent(current_scope.clone());
                         let mut runtime = Runtime::with_scope_and_nodes(body, run_scope);
-                        runtime.run()?;
-                        *self.get_current_scope_mut() = current_scope.lock().expect("panicking").clone()
-                    } 
-                    
-                    Ok(None)
-
-                } else{
-                    Err(RuntimeError::TypeError { actual_value: condition.value_type(), expected_value: ValueType::Bool })
+                        let r = runtime.run()?;
+                        *self.get_current_scope_mut() =
+                            current_scope.lock().expect("panicking").clone();
+                        Ok(r)
+                    } else {
+                        Ok(None)
+                    }
+                } else {
+                    Err(RuntimeError::TypeError {
+                        actual_value: condition.value_type(),
+                        expected_value: ValueType::Bool,
+                    })
                 }
+            }
+            IsEqual { left, right } => {
+                let left = self.eval(*left)?;
+                let right = self.eval(*right)?;
 
-
-
+                Ok(Some(Value::Bool(left == right)))
             }
             ClassDeclare { .. } | FnDeclare { .. } | Import(_) => Ok(None),
         }
@@ -449,17 +455,14 @@ impl Value {
             Self::String(_) => ValueType::String,
         }
     }
-    fn to_bool(&self)->Option<bool>{
-        match self{
-            Self::Bool(bool)=>Some(*bool),
-            Self::Number(num)=> Some(if *num==0{false} else {true}),
+    fn to_bool(&self) -> Option<bool> {
+        match self {
+            Self::Bool(bool) => Some(*bool),
+            Self::Number(num) => Some(*num!=0),
 
-            _=>None
+            _ => None,
         }
     }
-
-
-
 }
 impl From<String> for Value {
     fn from(value: String) -> Self {

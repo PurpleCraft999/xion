@@ -68,6 +68,13 @@ impl<'a> Lexer<'a> {
                 self.add_token(Token::StringLiteral(string_lit));
                 continue;
             }
+            if let Some(peek) = self.file.peek()
+                && let Some(token) = Token::from_two_char(current, *peek)
+            {
+                self.next();
+                self.add_token(token);
+                continue;
+            }
 
             if let Some(token) = Token::from_char(current) {
                 self.add_token(token);
@@ -127,6 +134,7 @@ pub enum Token {
     Dot,
     Import,
     If,
+    IsEq,
 }
 
 impl Token {
@@ -139,7 +147,7 @@ impl Token {
             "true" => True,
             "false" => False,
             "import" => Import,
-            "if"=>If,
+            "if" => If,
             number if let Ok(num) = number.parse::<i64>() => NumberLiteral(num),
             name if is_name(name) => Name(name.to_string()),
 
@@ -170,6 +178,13 @@ impl Token {
         };
         Some(token)
     }
+    fn from_two_char(c1: char, c2: char) -> Option<Self> {
+        let token = match (c1, c2) {
+            ('=', '=') => IsEq,
+            _ => return None,
+        };
+        Some(token)
+    }
     pub fn is_name(&self) -> bool {
         matches!(self, Name(_))
     }
@@ -177,7 +192,6 @@ impl Token {
         matches!(self, Plus | Minus | Asterisk)
     }
 }
-
 
 #[cfg(test)]
 #[path = "tests/lexer.rs"]

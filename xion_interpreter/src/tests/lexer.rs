@@ -95,3 +95,11 @@ fn parse_literals() {
         lexed
     )
 }
+#[test]
+fn parse_dual_tokens() {
+    let lexed = lex("==");
+    assert_eq!(vec![IsEq],lexed);
+
+
+
+}

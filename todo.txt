@@ -7,6 +7,5 @@ while loops
 for loops
 better functions
 conversion functions for types
-add floats
 add std objects
-better ast error handling
+fix issue where return is not registered in if statements

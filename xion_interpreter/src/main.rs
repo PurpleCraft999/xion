@@ -2,7 +2,7 @@ use log::debug;
 use xion_interpreter::runtime::Runtime;
 
 fn main() {
-    log::set_max_level(log::LevelFilter::Debug);
+    log::set_max_level(log::LevelFilter::Info);
     log::set_boxed_logger(Box::new(simple_logger::SimpleLogger::new()))
         .expect("only returns error when the logger is already set");
 

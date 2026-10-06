@@ -1,3 +1,5 @@
+use crate::ast::AstBuilder;
+
 use super::*;
 
 fn run(nodes: Vec<Node>) -> (RuntimeReturn, Runtime) {
@@ -440,5 +442,65 @@ fn test_method_call() {
     assert!(
         scope.with_var("w", |_| {}).is_some(),
         "method call statement should execute"
+    );
+}
+
+#[test]
+fn floating_point_math() {
+    let s = crate::token::Lexer::new(
+        r#"
+let a =(5.0*1.1);
+let b =(5.0/1.1);
+let c =(5.0+1.1);
+let d =(5.0-1.1);
+let e =(5.0*2);
+let f =(5.0/2);
+let g =(5.0+2);
+let h =(5.0-2);
+let i =(5*2.0);
+let j =(5/2.0);
+let k =(5+2.0);
+let l =(5-2.0);
+let m =(5.0+"");
+let n =(""+5.0);"#,
+    )
+    .lex();
+
+    let s = AstBuilder::new(s).build();
+
+    let run = run!(s;Runtime);
+
+    let expected = HashMap::from([
+        ("a", 5.5),
+        ("b", 4.545454545454545),
+        ("c", 6.1),
+        ("d", 3.9),
+        ("e", 10.),
+        ("f", 2.5),
+        ("g", 7.0),
+        ("h", 3.0),
+        ("i", 10.),
+        ("j", 2.5),
+        ("k", 7.0),
+        ("l", 3.0),
+    ]);
+    let mut expected: HashMap<String, Variable> = expected
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), Variable::new(Value::Float(v))))
+        .collect();
+    expected.insert(
+        String::from("m"),
+        Variable::new(Value::String("5".to_string())),
+    );
+    expected.insert(
+        String::from("n"),
+        Variable::new(Value::String("5".to_string())),
+    );
+
+    assert!(
+        run.current_scope
+            .vars
+            .into_iter()
+            .all(|(k, v)| expected.get(&k).unwrap() == &v)
     );
 }

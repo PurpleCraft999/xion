@@ -6,6 +6,8 @@ use crate::{
     },
     token::Token::{self, *},
 };
+const TRUE: Token = Token::BoolLiteral(true);
+const FALSE: Token = Token::BoolLiteral(false);
 
 fn ast(vec: Vec<Token>) -> Vec<Node> {
     crate::test_log::init_logger();
@@ -47,7 +49,7 @@ fn string_literal() {
 
 #[test]
 fn boolean_literal() {
-    let ast = ast(vec![True, SemiColon]);
+    let ast = ast(vec![TRUE, SemiColon]);
     assert_eq!(vec![Node::BoolLiteral(true)], ast);
 }
 
@@ -247,12 +249,12 @@ fn make_number_negative_during_math_equasion() {
 fn if_statment() {
     let ast = ast(vec![
         If,
-        True,
+        TRUE,
         LeftBrace,
         Let,
         Name("x"),
         Equals,
-        False,
+        FALSE,
         SemiColon,
         RightBrace,
     ]);
@@ -261,7 +263,7 @@ fn if_statment() {
             condition: Box::new(Node::BoolLiteral(true)),
             body: vec![Node::VarDeclare {
                 name: "x".to_string(),
-                value: Box::new(BoolLiteral(false))
+                value: Box::new(Node::BoolLiteral(false))
             }]
         }],
         ast
@@ -313,4 +315,15 @@ fn more_math() {
 fn parse_import() {
     let ast = ast(vec![Token::Import, Name("module"), SemiColon]);
     assert_eq!(vec![Node::Import("module".to_string())], ast);
+}
+
+#[test]
+fn parse_floating_point() {
+    let ast = ast(vec![
+        Token::NumberLiteral(37),
+        Dot,
+        Token::NumberLiteral(432),
+        SemiColon,
+    ]);
+    assert_eq!(vec![Node::FloatLiteral(37.432)], ast);
 }

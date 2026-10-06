@@ -87,8 +87,8 @@ fn parse_literals() {
     let lexed = lex("true false 50 \"string\"");
     assert_eq!(
         vec![
-            True,
-            False,
+            BoolLiteral(true),
+            BoolLiteral(false),
             NumberLiteral(50),
             StringLiteral("string".to_string())
         ],

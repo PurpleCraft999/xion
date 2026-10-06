@@ -72,7 +72,7 @@ impl Runtime {
                 }
             }
             NumberLiteral(num) => Ok(Some(Value::Number(num))),
-
+            FloatLiteral(float) => Ok(Some(Value::Float(float))),
             FnCall { name, arguments } => {
                 let Some(func) = self
                     .get_current_scope()
@@ -148,12 +148,8 @@ impl Runtime {
                 Ok(None)
             }
             Math { left, op, right } => {
-                let left = self
-                    .eval(*left)?
-                    .ok_or(RuntimeError::MathError(MathError::InvalidTypeLeft))?;
-                let right = self
-                    .eval(*right)?
-                    .ok_or(RuntimeError::MathError(MathError::InvalidTypeRight))?;
+                let left = self.eval(*left)?.ok_or(RuntimeError::RequireValue)?;
+                let right = self.eval(*right)?.ok_or(RuntimeError::RequireValue)?;
                 // if let Some(left) = left
                 //     && let Some(right) = right
                 {
@@ -360,68 +356,78 @@ pub enum Value {
     Bool(bool),
     Array(Vec<Value>),
     Object(ClassInstance),
+    Float(f64),
 }
 impl Value {
     fn add(&self, other: &Value) -> Result<Value, MathError> {
         match self {
             Value::Bool(left) => match other {
                 Value::String(right) => Ok(Value::String(left.to_string() + right)),
-                Value::Bool(_) | Value::Number(_) | Value::Array(_) | Value::Object(_) => {
-                    Err(MathError::InvalidTypeRight)
-                }
+                e => Err(MathError::InvalidTypeRight(e.value_type())),
             },
             Value::Number(left) => match other {
-                Value::Bool(_) | Value::Array(_) | Value::Object(_) => {
-                    Err(MathError::InvalidTypeRight)
-                }
+                Value::Float(right) => Ok(Value::Float(*left as f64 + *right)),
                 Value::Number(right) => Ok(Value::Number(*left + *right)),
                 Value::String(right) => Ok(Value::String(left.to_string() + right)),
+                e => Err(MathError::InvalidTypeRight(e.value_type())),
             },
             Value::String(left) => match other {
                 Value::Bool(right) => Ok(Value::String(left.to_owned() + &(right.to_string()))),
                 Value::Number(right) => Ok(Value::String(left.to_owned() + &(right.to_string()))),
                 Value::String(right) => Ok(Value::String(left.to_owned() + right)),
                 Value::Array(right) => Ok(Value::String(left.to_owned() + &vec_to_string(right))),
+                Value::Float(right) => Ok(Value::String(left.to_owned() + &right.to_string())),
                 Value::Object(_) => unimplemented!(),
             },
             Value::Array(left) => match other {
-                Value::Bool(_) | Value::Number(_) | Value::Array(_) | Value::Object(_) => {
-                    Err(MathError::InvalidTypeRight)
-                }
                 Value::String(right) => Ok(Value::String(vec_to_string(left) + right)),
+                e => Err(MathError::InvalidTypeRight(e.value_type())),
+            },
+            Value::Float(left) => match other {
+                Value::Float(right) => Ok(Value::Float(*left + *right)),
+                Value::Number(right) => Ok(Value::Float(*left + *right as f64)),
+                Value::String(right) => Ok(Value::String(left.to_string() + right)),
+                e => Err(InvalidTypeRight(e.value_type())),
             },
             Value::Object(_) => unimplemented!(),
         }
     }
     fn sub(&self, other: &Value) -> Result<Value, MathError> {
         match self {
-            Value::Bool(_) | Value::String(_) | Value::Array(_) => Err(MathError::InvalidTypeLeft),
             Value::Number(left) => match other {
-                Value::Bool(_) | Value::String(_) | Value::Array(_) | Value::Object(_) => {
-                    Err(MathError::InvalidTypeRight)
-                }
+                Value::Float(right) => Ok(Value::Float(*left as f64 - *right)),
                 Value::Number(right) => Ok(Value::Number(*left - *right)),
+                e => Err(MathError::InvalidTypeRight(e.value_type())),
             },
+            Value::Float(left) => match other {
+                Value::Float(right) => Ok(Value::Float(left - right)),
+                Value::Number(right) => Ok(Value::Float(left - *right as f64)),
+                e => Err(MathError::InvalidTypeRight(e.value_type())),
+            },
+
             Value::Object(_) => unimplemented!(),
+            e => Err(MathError::InvalidTypeLeft(e.value_type())),
         }
     }
     fn mul(&self, other: &Value) -> Result<Value, MathError> {
         match self {
-            Value::Bool(_) | Value::Array(_) => Err(MathError::InvalidTypeLeft),
             Value::Number(left) => match other {
-                Value::Bool(_) | Value::Array(_) | Value::Object(_) => {
-                    Err(MathError::InvalidTypeRight)
-                }
+                Value::Float(right) => Ok(Value::Float(*left as f64 * *right)),
                 Value::Number(right) => Ok(Value::Number(*left * *right)),
                 Value::String(right) => string_mult(right, *left).map(Value::String),
+                e => Err(MathError::InvalidTypeRight(e.value_type())),
             },
             Value::String(left) => match other {
                 Value::Number(right) => string_mult(left, *right).map(Value::String),
-                Value::Array(_) | Value::Bool(_) | Value::String(_) | Value::Object(_) => {
-                    Err(InvalidTypeRight)
-                }
+                e => Err(InvalidTypeRight(e.value_type())),
+            },
+            Value::Float(left) => match other {
+                Value::Float(right) => Ok(Value::Float(left * right)),
+                Value::Number(right) => Ok(Value::Float(*left * *right as f64)),
+                e => Err(MathError::InvalidTypeRight(e.value_type())),
             },
             Value::Object(_) => unimplemented!(),
+            e => Err(MathError::InvalidTypeLeft(e.value_type())),
         }
     }
     fn div(&self, other: &Value) -> Result<Value, MathError> {
@@ -433,8 +439,30 @@ impl Value {
                     Ok(Value::Number(left / right))
                 }
             }
-            (Value::Number(_), _) => Err(InvalidTypeRight),
-            (_, Value::Number(_)) => Err(InvalidTypeLeft),
+            (Value::Number(left), Value::Float(right)) => {
+                if *right == 0.0 {
+                    Err(MathError::DivisionByZero)
+                } else {
+                    Ok(Value::Float(*left as f64 / right))
+                }
+            }
+            (Value::Float(left), Value::Number(right)) => {
+                if *right == 0 {
+                    Err(MathError::DivisionByZero)
+                } else {
+                    Ok(Value::Float(left / *right as f64))
+                }
+            }
+            (Value::Float(left), Value::Float(right)) => {
+                if *right == 0.0 {
+                    Err(MathError::DivisionByZero)
+                } else {
+                    Ok(Value::Float(left / right))
+                }
+            }
+
+            (Value::Number(_), e) => Err(InvalidTypeRight(e.value_type())),
+            (e, Value::Number(_)) => Err(InvalidTypeLeft(e.value_type())),
             _ => unreachable!(
                 "number ocupies both slots in previous brances therefore this cannot be reached"
             ),
@@ -447,6 +475,7 @@ impl Value {
             Self::Number(_) => ValueType::Int,
             Self::Object(_) => ValueType::Object,
             Self::String(_) => ValueType::String,
+            Self::Float(_) => ValueType::Float,
         }
     }
     fn to_bool(&self) -> Option<bool> {
@@ -471,6 +500,7 @@ pub enum ValueType {
     Int,
     Object,
     String,
+    Float,
 }
 
 fn vec_to_string<T: ToString>(vec: &Vec<T>) -> String {
@@ -507,6 +537,7 @@ impl std::fmt::Display for Value {
             Self::String(s) => s.to_owned(),
             Self::Array(v) => vec_to_string(v),
             Self::Object(o) => o.to_string(),
+            Self::Float(f) => f.to_string(),
         };
         write!(f, "{string_value}")
     }
@@ -514,8 +545,8 @@ impl std::fmt::Display for Value {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum MathError {
-    InvalidTypeLeft,
-    InvalidTypeRight,
+    InvalidTypeLeft(ValueType),
+    InvalidTypeRight(ValueType),
     UnexpectedNegativeInt,
     DivisionByZero,
 }
@@ -830,7 +861,7 @@ impl Display for RuntimeError {
             RuntimeError::RequireValue => write!(f, "a value was required but eval was None"),
             RuntimeError::MathError(err) => write!(
                 f,
-                "while conducting a math equasion this error oqured {err:?}"
+                "while conducting a math equasion this error occurred {err:?}"
             ),
             RuntimeError::Other(o) => write!(f, "{o}"),
             RuntimeError::TypeError {

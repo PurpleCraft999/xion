@@ -79,7 +79,7 @@ impl AstBuilder {
         Option<&'expr Token>: From<&'expr E>,
     {
         let node: Result<Node, AstError> = match token {
-            NumberLiteral(_) | Name(_) | StringLiteral(_) | LeftParen | Minus => {
+            NumberLiteral(_) | Name(_) | StringLiteral(_) | LeftParen | Minus | BoolLiteral(_) => {
                 pratt_parser::parse_expression(self, 0, token, end_token.into())
             }
             Return => {
@@ -94,8 +94,6 @@ impl AstBuilder {
             LeftBracket => self.parse_array(),
             Let => self.parse_var(),
             Fn => self.parse_function(),
-            True => Ok(Node::BoolLiteral(true)),
-            False => Ok(Node::BoolLiteral(false)),
             LeftBrace | RightBrace | RightParen | SemiColon | Comma | Colon | WhiteSpace
             | Equals | EOF | Class | Plus | Asterisk | RightBracket | Division | Dot | IsEq => {
                 error!("unexpected token while parsing expresion: {:?}", token);
@@ -312,6 +310,7 @@ enum AstError {
 #[derive(Debug)]
 enum SyntaxError {
     NoName,
+    InvalidFloat,
 }
 
 #[derive(Debug, Clone)]
@@ -375,6 +374,7 @@ pub enum Node {
         left: Box<Node>,
         right: Box<Node>,
     },
+    FloatLiteral(f64),
 }
 #[derive(Debug, Clone)]
 #[cfg_attr(test, derive(PartialEq))]
@@ -423,16 +423,37 @@ mod pratt_parser {
 
                 return Err(AstError::UnexpectedToken);
             }
-            Token::NumberLiteral(num) => super::Node::NumberLiteral(num),
-            Token::StringLiteral(string) => super::Node::StringLiteral(string),
+            Token::NumberLiteral(num) => {
+                if let Some(&Token::Dot) = lexer.peek() {
+                    lexer.next();
+                    if let Some(peek) = lexer.peek()
+                        && let Token::NumberLiteral(frac) = *peek
+                    {
+                        lexer.next();
+                        //converts to f64
+                        Node::FloatLiteral(format!("{num}.{frac}").parse::<f64>().map_err(
+                            |_| AstError::SyntaxError {
+                                _kind: super::SyntaxError::InvalidFloat,
+                            },
+                        )?)
+                    } else {
+                        return Err(AstError::InvalidExprEnd);
+                    }
+                } else {
+                    Node::NumberLiteral(num)
+                }
+            }
+            Token::BoolLiteral(b) => Node::BoolLiteral(b),
+            Token::StringLiteral(string) => Node::StringLiteral(string),
             Token::Minus => match lexer.peek() {
                 Some(Token::NumberLiteral(num)) => {
                     let num = -*num;
                     lexer.next();
-                    super::Node::NumberLiteral(num)
+                    Node::NumberLiteral(num)
                 }
                 _ => return Err(AstError::UnexpectedToken),
             },
+
             t => {
                 error!("bad token: {:?}", t);
                 return Err(AstError::UnexpectedToken);

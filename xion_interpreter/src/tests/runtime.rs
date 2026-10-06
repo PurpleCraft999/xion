@@ -9,7 +9,7 @@ fn run(nodes: Vec<Node>) -> (RuntimeReturn, Runtime) {
     if let Err(err) = err {
         panic!("{err}")
     }
-    (err, run)
+    (err.map(|s| s.as_value()), run)
 }
 macro_rules! run {
     ($nodes:expr) => {
@@ -503,4 +503,17 @@ let n =(""+5.0);"#,
             .into_iter()
             .all(|(k, v)| expected.get(&k).unwrap() == &v)
     );
+}
+
+#[test]
+fn test_nested_return() {
+    let nodes = vec![
+        If {
+            condition: Box::new(Node::BoolLiteral(true)),
+            body: vec![Return(Some(Box::new(Node::BoolLiteral(true))))],
+        },
+        Node::Return(Some(Box::new(Node::BoolLiteral(false)))),
+    ];
+    let r = run!(nodes);
+    assert_eq!(Ok(Some(Value::Bool(true))), r);
 }

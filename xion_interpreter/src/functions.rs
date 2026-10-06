@@ -56,6 +56,6 @@ impl NonNativeFunction {
                 .add_var(name, Variable::new(value))
                 .expect("this is safe because these are the first vars made");
         }
-        runtime.run()
+        runtime.run().map(|v| v.as_value())
     }
 }

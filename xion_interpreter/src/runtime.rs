@@ -19,7 +19,7 @@ pub type RuntimeReturn = Result<Option<Value>, RuntimeError>;
 pub struct Runtime {
     nodes: Vec<Node>,
     current_scope: Scope,
-    return_value: Option<Value>,
+    return_value: Option<FunctionReturn>,
 }
 impl Runtime {
     pub fn main(nodes: Vec<Node>) -> Self {
@@ -139,11 +139,11 @@ impl Runtime {
             BoolLiteral(b) => Ok(Some(Value::Bool(b))),
             Return(value) => {
                 let value = if let Some(value) = value {
-                    self.eval(*value)?
+                    FunctionReturn::Value(self.eval(*value)?.ok_or(RuntimeError::RequireValue)?)
                 } else {
-                    None
+                    FunctionReturn::None
                 };
-                self.return_value = value;
+                self.return_value = Some(value);
 
                 Ok(None)
             }
@@ -225,13 +225,14 @@ impl Runtime {
                         let current_scope = Arc::new(Mutex::new(self.get_current_scope().clone()));
                         let run_scope = Scope::with_mutable_parent(current_scope.clone());
                         let mut runtime = Runtime::with_scope_and_nodes(body, run_scope);
-                        let r = runtime.run()?;
+                        runtime.run()?;
+
+                        self.return_value = runtime.return_value;
+
                         *self.get_current_scope_mut() =
                             current_scope.lock().expect("panicking").clone();
-                        Ok(r)
-                    } else {
-                        Ok(None)
                     }
+                    Ok(None)
                 } else {
                     Err(RuntimeError::TypeError {
                         actual_value: condition.value_type(),
@@ -333,20 +334,21 @@ impl Runtime {
         Ok(None)
     }
 
-    pub fn run(&mut self) -> RuntimeReturn {
+    pub fn run(&mut self) -> Result<FunctionReturn, RuntimeError> {
         self.parse_ahead()?;
 
         let nodes = std::mem::take(&mut self.nodes);
         for node in nodes {
-            if matches!(node, Return(_)) {
-                self.eval(node)?;
+            self.eval(node)?;
+            if self.return_value.is_some() {
                 break;
             }
-
-            self.eval(node)?;
         }
         debug!("{self:?}");
-        Ok(self.return_value.take())
+        Ok(match &self.return_value {
+            Some(FunctionReturn::Value(v)) => FunctionReturn::Value(v.clone()),
+            _ => FunctionReturn::None,
+        })
     }
 }
 #[derive(Debug, Clone, PartialEq)]
@@ -490,6 +492,19 @@ impl Value {
 impl From<String> for Value {
     fn from(value: String) -> Self {
         Value::String(value)
+    }
+}
+#[derive(Debug, Clone)]
+pub enum FunctionReturn {
+    Value(Value),
+    None,
+}
+impl FunctionReturn {
+    pub fn as_value(self) -> Option<Value> {
+        match self {
+            Self::Value(v) => Some(v),
+            Self::None => None,
+        }
     }
 }
 

@@ -13,7 +13,7 @@ let <name> = <value>;
 ```
 ### Function declarations
 
-keyword fn followed by na
+keyword fn followed by name
 
 ```xion
 fn <name>(<values>){
@@ -43,3 +43,13 @@ class <name>{
 <name>();
 
 ```
+constructor with args
+```xion
+
+Dog(breed:"Husky",age:4);
+
+
+
+
+```
+

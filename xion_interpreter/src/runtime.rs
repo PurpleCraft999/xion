@@ -7,7 +7,7 @@ use log::{debug, error, warn};
 
 use crate::ast::Node::*;
 use crate::ast::{MathSign, Node};
-use crate::class::{ClassInstance, RuntimeClass};
+use crate::class::{ClassDefinitionError, ClassPath, RuntimeClass, RuntimeClassInstance};
 use crate::functions::{Function, NativeFunction, NativeFunctionHeader, NonNativeFunction};
 use crate::runtime::MathError::{InvalidTypeLeft, InvalidTypeRight};
 use crate::runtime::RuntimeError::{DoesNotExist, Other};
@@ -22,12 +22,19 @@ pub struct Runtime {
     return_value: Option<FunctionReturn>,
 }
 impl Runtime {
-    pub fn main(nodes: Vec<Node>) -> Self {
-        let mut scope = Scope::new();
+    pub fn main(nodes: Vec<Node>) -> Result<Self, String> {
+        let mut scope = Scope::new(
+            std::env::current_dir()
+                .map_err(|_| "could not get current working directory".to_string())?
+                .to_string_lossy()
+                .to_string(),
+        );
+        debug!("{:?}", std::env::current_dir());
         if let Err(e) = scope.add_module("lang") {
             error!("error adding lang module: {e}");
+            return Err("could not add the lang module to startup".to_string());
         }
-        Self::with_scope_and_nodes(nodes, scope)
+        Ok(Self::with_scope_and_nodes(nodes, scope))
     }
     pub fn with_scope_and_nodes(nodes: Vec<Node>, current_scope: Scope) -> Self {
         Self {
@@ -102,7 +109,9 @@ impl Runtime {
                                         .into_iter()
                                         .map(|(k, v)| (k + INJECTED_VAR_NAME, v))
                                         .collect(),
-                                    ..Default::default()
+                                    ..Scope::new(
+                                        class.class_path.name().to_string() + "Constructor",
+                                    )
                                 })))
                             } else {
                                 error!("child scope does not have parent");
@@ -255,12 +264,14 @@ impl Runtime {
                 //TODO: In the future this scope should be only globals,consts, and the like and not completly empty
                 let mut runtime = Runtime::with_scope_and_nodes(body, self.child_scoped_no_var());
                 runtime.run()?;
+                let path = ClassPath::new(self.get_current_scope().name.clone(), name.clone());
 
-                let runtime_class = RuntimeClass {
-                    name: name.clone(),
-                    fields: runtime.current_scope.vars,
-                    methods: runtime.current_scope.functions,
-                };
+                let runtime_class = RuntimeClass::new(
+                    path,
+                    runtime.current_scope.vars,
+                    runtime.current_scope.functions,
+                )
+                .map_err(RuntimeError::ClassDefinitionError)?;
                 self.get_current_scope_mut().add_class(runtime_class)?;
 
                 self.get_current_scope_mut()
@@ -357,7 +368,7 @@ pub enum Value {
     Number(i64),
     Bool(bool),
     Array(Vec<Value>),
-    Object(ClassInstance),
+    Object(RuntimeClassInstance),
     Float(f64),
 }
 impl Value {
@@ -597,16 +608,23 @@ impl ParentScope {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct Scope {
+    name: String,
     pub(crate) parent_scope: Option<ParentScope>,
     pub(crate) vars: HashMap<String, Variable>,
     functions: HashMap<String, Function>,
     classes: HashMap<String, Arc<RuntimeClass>>,
 }
 impl Scope {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(name: String) -> Self {
+        Self {
+            name,
+            parent_scope: None,
+            vars: HashMap::new(),
+            functions: HashMap::new(),
+            classes: HashMap::new(),
+        }
     }
     pub fn add_native_fn(
         &mut self,
@@ -626,15 +644,17 @@ impl Scope {
 
     pub fn with_parent(scope: Scope) -> Self {
         // scope.vars=HashMap::new();
+        let name = scope.name.clone();
         Self {
             parent_scope: Some(ParentScope::Normal(Box::new(scope))),
-            ..Default::default()
+            ..Self::new(name)
         }
     }
     pub fn with_mutable_parent(scope: Arc<Mutex<Scope>>) -> Self {
+        let name = scope.lock().expect("panicking").name.clone();
         Self {
             parent_scope: Some(ParentScope::Mut(scope)),
-            ..Default::default()
+            ..Self::new(name)
         }
     }
 
@@ -782,12 +802,13 @@ impl Scope {
 pub fn make_module(name: &str) -> Result<Scope, RuntimeError> {
     fn parse_file(path: &Path) -> Result<Scope, RuntimeError> {
         let nodes = parse_and_lex(path);
-        let mut run = Runtime::with_scope_and_nodes(nodes, Scope::new());
+        let mut run =
+            Runtime::with_scope_and_nodes(nodes, Scope::new(path.to_string_lossy().to_string()));
         run.run()?;
         Ok(run.current_scope)
     }
     fn parse_path(path: &Path) -> Result<Scope, RuntimeError> {
-        let mut scope = Scope::new();
+        let mut scope = Scope::new(path.to_string_lossy().to_string());
         if path.is_file() {
             scope.extend(parse_file(path)?)?
         } else if path.is_dir() {
@@ -818,6 +839,9 @@ pub fn make_module(name: &str) -> Result<Scope, RuntimeError> {
 
     let mut path = std::path::PathBuf::from(String::from("xlibs/") + name);
     // debug!("module path {:?}",path);
+    path = std::env::current_dir()
+        .expect("get cwd also repleace this later")
+        .join(path);
     if !path.exists() {
         path.set_extension("xn");
         if !path.exists() {
@@ -828,7 +852,7 @@ pub fn make_module(name: &str) -> Result<Scope, RuntimeError> {
         }
     }
 
-    let mut scope = Scope::new();
+    let mut scope = Scope::new(name.to_string());
     match scope.extend(parse_path(&path)?) {
         Ok(()) => (),
         Err(e) => {
@@ -866,6 +890,7 @@ pub enum RuntimeError {
         actual_value: ValueType,
         expected_value: ValueType,
     },
+    ClassDefinitionError(ClassDefinitionError),
 }
 
 impl Display for RuntimeError {
@@ -887,6 +912,7 @@ impl Display for RuntimeError {
                 "a value of type {:?} was expected but a value of {:?} was found instead",
                 actual_value, expected_value
             ),
+            RuntimeError::ClassDefinitionError(e) => write!(f, "{e}"),
         }
     }
 }

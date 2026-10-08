@@ -49,7 +49,7 @@ mod lib {
     macro_rules! lib {
         ($map:expr, $($name:expr=>$block:expr),+ $(,)?) => {
             $(
-                let mut scope = crate::runtime::Scope::new();
+                let mut scope = crate::runtime::Scope::new(String::from("std"));
                 // $block(&mut scope).expect("no names are the same in the same module");
                 let block:fn(&mut Scope)-> Result<(), RuntimeError> = $block;
                 block(&mut scope).expect("all names are unique");

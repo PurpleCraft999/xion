@@ -1,0 +1,6 @@
+import name;
+import foo;
+import io;
+
+
+print(Name(name:"goh"));

@@ -5,3 +5,13 @@ fn foo(){
     let name = "john";
     return Name(name:name);
 }
+
+
+
+
+class Name{
+
+    let length = 0;
+
+
+}

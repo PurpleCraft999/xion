@@ -4,7 +4,7 @@ use super::*;
 
 fn run(nodes: Vec<Node>) -> (RuntimeReturn, Runtime) {
     crate::test_log::init_logger();
-    let mut run = Runtime::main(nodes);
+    let mut run = Runtime::main(nodes).expect("test env should not fail");
     let err = run.run();
     if let Err(err) = err {
         panic!("{err}")

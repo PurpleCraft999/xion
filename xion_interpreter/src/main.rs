@@ -1,4 +1,6 @@
-use log::debug;
+use std::path::PathBuf;
+
+use log::{debug, error};
 use xion_interpreter::runtime::Runtime;
 
 fn main() {
@@ -6,10 +8,38 @@ fn main() {
     log::set_boxed_logger(Box::new(simple_logger::SimpleLogger::new()))
         .expect("only returns error when the logger is already set");
 
-    let nodes = xion_interpreter::parse_and_lex("xion_interpreter/test_programs/if.xn");
+    let main_file;
+
+    #[cfg(debug_assertions)]
+    {
+        main_file = "xion_interpreter/test_programs/import_test.xn".to_string();
+    }
+
+    #[cfg(not(debug_assertions))]
+    {
+        let args: Vec<_> = std::env::args().collect();
+        main_file = match args.get(1) {
+            Some(s) => s.to_string(),
+            None => {
+                println!("please pass the main file");
+                return;
+            }
+        };
+    }
+    let path = PathBuf::from(main_file);
+    let nodes = xion_interpreter::parse_and_lex(&path);
     debug!("running main");
-    match Runtime::main(nodes).run() {
+
+    let mut runtime = match Runtime::main(nodes) {
+        Ok(r) => r,
+        Err(e) => {
+            error!(target:"main", "{e}");
+            return;
+        }
+    };
+
+    match runtime.run() {
         Ok(_) => (),
-        Err(e) => log::error!("{e}"),
+        Err(e) => log::error!(target:"main", "{e}"),
     }
 }

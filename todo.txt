@@ -8,3 +8,10 @@ for loops
 better functions
 conversion functions for types
 add std objects
+
+
+
+
+Make toml for imports instead
+
+figure out how to resolve import name conficts

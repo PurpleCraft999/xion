@@ -274,8 +274,7 @@ impl Runtime {
                 .map_err(RuntimeError::ClassDefinitionError)?;
                 self.get_current_scope_mut().add_class(runtime_class)?;
 
-                self.get_current_scope_mut()
-                    .add_native_fn(&name, xion_std::instantiate)?;
+                self.get_current_scope_mut().add_constructor(name)?;
                 Ok(None)
             }
             FnDeclare {
@@ -626,6 +625,22 @@ impl Scope {
             classes: HashMap::new(),
         }
     }
+    //clippy falsly flag this
+    #[allow(clippy::map_entry)]
+    pub fn add_constructor(&mut self, name: String) -> Result<(), RuntimeError> {
+        if self.functions.contains_key(&name) {
+            Err(RuntimeError::AlreadyExists(format!(
+                "cannot add constructor \"{name}\""
+            )))
+        } else {
+            self.functions.insert(
+                name,
+                Function::Native(NativeFunction::new(xion_std::instantiate)),
+            );
+            Ok(())
+        }
+    }
+
     pub fn add_native_fn(
         &mut self,
         name: &str,

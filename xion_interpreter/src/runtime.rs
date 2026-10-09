@@ -11,7 +11,7 @@ use crate::class::{ClassDefinitionError, ClassPath, RuntimeClass, RuntimeClassIn
 use crate::functions::{Function, NativeFunction, NativeFunctionHeader, NonNativeFunction};
 use crate::runtime::MathError::{InvalidTypeLeft, InvalidTypeRight};
 use crate::runtime::RuntimeError::{DoesNotExist, Other};
-use crate::{parse_and_lex, xion_std};
+use crate::{parse_and_lex_file, xion_std};
 
 pub type RuntimeReturn = Result<Option<Value>, RuntimeError>;
 
@@ -58,8 +58,10 @@ impl Runtime {
                 name,
                 value,
             } => {
+                // if attributes.is_static() {
+                //     self.get_current_scope_mut().add_static_var(name, var)
+                // } else {
                 let value = self.eval(*value)?.ok_or(RuntimeError::RequireValue)?;
-
                 let var = Variable::with_attributes(value, attributes);
                 self.get_current_scope_mut().add_var(name.clone(), var)?;
 
@@ -90,65 +92,67 @@ impl Runtime {
             }
             NumberLiteral(num) => Ok(Some(Value::Number(num))),
             FloatLiteral(float) => Ok(Some(Value::Float(float))),
-            FnCall { name, arguments } => {
-                let Some(func) = self
-                    .get_current_scope()
-                    .with_function(&name, |func| func.clone())
-                else {
-                    return Err(DoesNotExist(format!("cannot call function \"{}\"", name)));
-                };
+            FnCall {
+                name: func_name,
+                arguments,
+            } => {
+                // if self.get_current_scope().name==func_name{
+
+                // }
 
                 //class constructor
-                match func {
-                    Function::Native(_) => {
-                        if let Some(class) = self.get_current_scope().get_class(&name) {
-                            const INJECTED_VAR_NAME: &str = "@from_constructor";
-                            debug!("instantiating class {class:?}");
-                            let mut instance = class.instantiate();
-                            let mut scope = self.child_scope();
+                if let Some(class) = self.get_current_scope().get_class(&func_name) {
+                    //allows for Class(a:a);
+                    const INJECTED_VAR_NAME: &str = "@from_constructor";
+                    debug!("instantiating class {class:?}");
+                    let mut instance = class.instantiate();
+                    let mut scope = self.child_scope();
 
-                            scope.parent_scope = if let ParentScope::Normal(n) = scope
-                                .parent_scope
-                                .as_ref()
-                                .expect("we declared a child scope")
-                            {
-                                Some(ParentScope::Normal(Box::new(Scope {
-                                    variables: n
-                                        .variables
-                                        .clone()
-                                        .into_iter()
-                                        .map(|(k, v)| (k + INJECTED_VAR_NAME, v))
-                                        .collect(),
-                                    ..Scope::new(
-                                        class.class_path.name().to_string() + "Constructor",
-                                    )
-                                })))
-                            } else {
-                                error!("child scope does not have parent");
-                                None
-                            };
-                            let mut arguments = arguments;
-                            for argument in &mut arguments {
-                                if let Node::VarReasign { new_value, .. } = argument
-                                    && let Node::VarRef(name) = &mut **new_value
-                                {
-                                    *name += INJECTED_VAR_NAME
-                                }
-                            }
-                            // //
-                            // scope.vars.extend(class.fields.clone());
-                            scope.variables.extend(class.fields.clone());
-
-                            // should run any VarAssigns for the class
-                            let mut runtime = Runtime::with_scope_and_nodes(arguments, scope);
-                            runtime.run()?;
-                            instance.set_fields(runtime.current_scope.variables);
-
-                            return Ok(Some(Value::Object(instance)));
+                    scope.parent_scope = if let ParentScope::Normal(n) = scope
+                        .parent_scope
+                        .as_ref()
+                        .expect("we declared a child scope")
+                    {
+                        Some(ParentScope::Normal(Box::new(Scope {
+                            variables: n
+                                .variables
+                                .clone()
+                                .into_iter()
+                                .map(|(k, v)| (k + INJECTED_VAR_NAME, v))
+                                .collect(),
+                            ..Scope::new(class.class_path.name().to_string() + "Constructor")
+                        })))
+                    } else {
+                        error!("child scope does not have parent");
+                        None
+                    };
+                    let mut arguments = arguments;
+                    for argument in &mut arguments {
+                        if let Node::VarReasign { new_value, .. } = argument
+                            && let Node::VarRef(name) = &mut **new_value
+                        {
+                            *name += INJECTED_VAR_NAME
                         }
                     }
-                    Function::NonNative(_) => (),
+                    scope.variables.extend(class.fields.clone());
+
+                    // should run any VarAssigns for the class
+                    let mut runtime = Runtime::with_scope_and_nodes(arguments, scope);
+                    runtime.run()?;
+                    instance.set_fields(runtime.current_scope.variables);
+
+                    return Ok(Some(Value::Object(instance)));
                 }
+
+                let Some(func) = self
+                    .get_current_scope()
+                    .with_function(&func_name, |func| func.clone())
+                else {
+                    return Err(DoesNotExist(format!(
+                        "cannot call function \"{}\"",
+                        func_name
+                    )));
+                };
 
                 //evaluates any variable names and the like
                 let arguments = self.eval_list(arguments)?;
@@ -220,6 +224,7 @@ impl Runtime {
                                     "field {field_name} in class {}",
                                     obj.class().name()
                                 ))),
+                            //static variables
                             Value::Class(class) => class
                                 .static_fields
                                 .get(&field_name)
@@ -241,19 +246,6 @@ impl Runtime {
                     ))),
                 }
             }
-            // FieldAccess {
-            //     var_name,
-            //     field_name,
-            // } => *self
-            //     .get_current_scope()
-            //     .with_var(&var_name, |var| match &var.get_value() {
-            //         Value::Object(obj) => Ok(obj.get_field(&field_name).map(|v| v.get_value().clone())),
-            //         _ => {
-
-            //             Err(RuntimeError::RequireValue)
-            //         },
-            //      }).get_or_insert(Err(RuntimeError::DoesNotExist(format!("field {field_name} does not exist in class"))))
-            //.ok_or(),
             FieldReasign {
                 var_name,
                 field_name,
@@ -271,7 +263,10 @@ impl Runtime {
                             }
                             None => None,
                         },
-                        _ => None,
+                        e => {
+                            error!("reassigned field {field_name} on {}", e.value_type());
+                            None
+                        }
                     })
                     .flatten())
             }
@@ -308,20 +303,29 @@ impl Runtime {
     }
     fn early_eval(&mut self, node: Node) -> RuntimeReturn {
         match node {
-            ClassDeclare { name, body } => {
-                //TODO: In the future this scope should be only globals,consts, and the like and not completly empty
-                let mut runtime = Runtime::with_scope_and_nodes(body, self.child_scoped_no_var());
-                runtime.run()?;
-                let path = ClassPath::new(self.get_current_scope().name.clone(), name.clone());
+            ClassDeclare {
+                name: class_name,
+                body,
+            } => {
+                let scope = self.child_scoped_no_var();
+                // scope.name=class_name.clone();
+                let (static_fields,body) = body.into_iter().partition(|t|matches!(t,Node::VarDeclare { attributes, name, value } if attributes.is_static()));
+
+                let mut class_body = Runtime::with_scope_and_nodes(body, scope);
+                class_body.run()?;
+                let path =
+                    ClassPath::new(self.get_current_scope().name.clone(), class_name.clone());
 
                 let runtime_class = RuntimeClass::new(
                     path,
-                    runtime.current_scope.variables,
-                    runtime.current_scope.functions,
-                    runtime.current_scope.static_variables,
+                    class_body.current_scope.variables,
+                    class_body.current_scope.functions,
+                    class_body.current_scope.static_variables,
                 )
                 .map_err(RuntimeError::ClassDefinitionError)?;
-                self.get_current_scope_mut().add_class(runtime_class)?;
+
+                self.get_current_scope_mut()
+                    .make_class(runtime_class, static_fields)?;
 
                 // self.get_current_scope_mut().add_constructor(name)?;
                 Ok(None)
@@ -697,22 +701,6 @@ impl Scope {
             static_variables: HashMap::new(),
         }
     }
-    //clippy falsly flag this
-    #[allow(clippy::map_entry)]
-    pub fn add_constructor(&mut self, name: String) -> Result<(), RuntimeError> {
-        if self.functions.contains_key(&name) {
-            Err(RuntimeError::AlreadyExists(format!(
-                "cannot add constructor \"{name}\""
-            )))
-        } else {
-            self.functions.insert(
-                name,
-                Function::Native(NativeFunction::new(xion_std::instantiate)),
-            );
-            Ok(())
-        }
-    }
-
     pub fn add_native_fn(
         &mut self,
         name: &str,
@@ -746,56 +734,18 @@ impl Scope {
     }
 
     pub fn add_var(&mut self, name: String, var: Variable) -> Result<(), RuntimeError> {
-        if self.variables.contains_key(&name) {
+        if self.variables.contains_key(&name) || self.static_variables.contains_key(&name) {
             return Err(RuntimeError::AlreadyExists(format!(
                 "cannot create variable \"{name}\""
             )));
         }
-
         if var.attributes.is_static() {
             self.static_variables.insert(name, var);
         } else {
             self.variables.insert(name, var);
         }
-
         Ok(())
     }
-
-    // pub fn update_var(&mut self, name: &str, var_value: Value) -> Result<(), RuntimeError> {
-    //     match self.variables.get_mut(name) {
-    //         Some(value) => {
-    //             *value.get_mut() = var_value;
-    //             Ok(())
-    //         }
-    //         None => {
-    //             if let Some(parent) = &self.parent_scope {
-    //                 match parent {
-    //                     ParentScope::Mut(parent) => {
-    //                         if let Some(var) = parent
-    //                             .lock()
-    //                             .expect("we are panicing")
-    //                             .variables
-    //                             .get_mut(name)
-    //                         {
-    //                             *var.get_mut() = var_value;
-    //                             Ok(())
-    //                         } else {
-    //                             Err(RuntimeError::DoesNotExist(name.to_owned()))
-    //                         }
-    //                     }
-    //                     ParentScope::Normal(parent) => {
-    //                         if parent.variables.contains_key(name) {
-    //                             warn!("tried to update read only variable from parent scope")
-    //                         }
-    //                         Err(RuntimeError::DoesNotExist(name.to_owned()))
-    //                     }
-    //                 }
-    //             } else {
-    //                 Err(RuntimeError::DoesNotExist(name.to_owned()))
-    //             }
-    //         }
-    //     }
-    // }
 
     pub fn add_func(&mut self, func: NonNativeFunction) -> Result<(), RuntimeError> {
         if self.functions.contains_key(func.name()) {
@@ -823,7 +773,7 @@ impl Scope {
                 } else if let Some(parent) = &mut self.parent_scope {
                     parent.with_var_mut(name, closure)
                 } else {
-                    error!("field {name} does not exist");
+                    error!("variable {name} does not exist");
 
                     None
                 }
@@ -834,12 +784,12 @@ impl Scope {
         match self.variables.get(name) {
             Some(v) => Some(closure(v)),
             None => {
-                if let Some(var) = self.variables.get(name) {
+                if let Some(var) = self.static_variables.get(name) {
                     Some(closure(var))
                 } else if let Some(parent) = &self.parent_scope {
                     parent.with_var(name, closure)
                 } else {
-                    error!("field {name} does not exist");
+                    error!("variable {name} does not exist");
                     None
                 }
             }
@@ -858,20 +808,50 @@ impl Scope {
             }
         }
     }
-    pub fn add_class(&mut self, class: RuntimeClass) -> Result<(), RuntimeError> {
+    ///after init is static variables currently but can be anything that needs to be run after the class is added
+    pub fn add_class(&mut self, class: Arc<RuntimeClass>) -> Result<(), RuntimeError> {
         if self.classes.contains_key(class.name()) {
             return Err(RuntimeError::AlreadyExists(format!(
                 "class {}",
                 class.name()
             )));
         }
-        let class = Arc::new(class);
+        // let class = Arc::new(class);
         self.classes
             .insert(class.name().to_owned(), Arc::clone(&class));
-        self.add_constructor(class.name().to_string())?;
-        self.add_var(class.name().to_string(), Variable::new(Value::Class(class)))?;
+        // self.add_constructor("<init>".to_string()+class.name())?;
+
+        self.add_var(
+            class.name().to_string(),
+            Variable::with_attributes(Value::Class(class), VariableAttributes::attr_static()),
+        )?;
         Ok(())
     }
+
+    fn make_class(
+        &mut self,
+        class: RuntimeClass,
+        after_init: Vec<Node>,
+    ) -> Result<(), RuntimeError> {
+        let class = Arc::new(class);
+        self.add_class(class.clone())?;
+        let mut after_class_init = Runtime::with_scope_and_nodes(after_init, self.clone());
+        after_class_init.run()?;
+
+        self.static_variables.remove(class.name());
+        let mut class = Arc::unwrap_or_clone(class);
+
+        class.static_fields = after_class_init.current_scope.static_variables;
+        let class = Arc::new(class);
+        self.classes.insert(class.name().to_string(), class.clone());
+
+        self.add_var(
+            class.name().to_string(),
+            Variable::with_attributes(Value::Class(class), VariableAttributes::attr_static()),
+        )?;
+        Ok(())
+    }
+
     pub fn get_class(&self, name: &str) -> Option<Arc<RuntimeClass>> {
         self.classes
             .get(name)
@@ -892,7 +872,7 @@ impl Scope {
             self.add_var(name, var)?
         }
         for (_, class) in other.classes {
-            self.add_class(Arc::unwrap_or_clone(class))?
+            self.add_class(class)?
         }
         Ok(())
     }
@@ -905,7 +885,7 @@ impl Scope {
 
 pub fn make_module(name: &str) -> Result<Scope, RuntimeError> {
     fn parse_file(path: &Path) -> Result<Scope, RuntimeError> {
-        let nodes = parse_and_lex(path);
+        let nodes = parse_and_lex_file(path);
         let mut run =
             Runtime::with_scope_and_nodes(nodes, Scope::new(path.to_string_lossy().to_string()));
         run.run()?;

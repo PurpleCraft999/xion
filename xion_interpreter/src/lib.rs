@@ -21,9 +21,13 @@ mod test_log {
         });
     }
 }
-pub fn parse_and_lex(path: impl AsRef<Path>) -> Vec<ast::Node> {
+pub fn parse_and_lex_file(path: impl AsRef<Path>) -> Vec<ast::Node> {
     let file = std::fs::read_to_string(path).unwrap();
-    let lexer = token::Lexer::new(&file);
+    parse_and_lex(&file)
+}
+
+pub fn parse_and_lex(code: &str) -> Vec<ast::Node> {
+    let lexer = token::Lexer::new(code);
     let mut lexed = lexer.lex();
     lexed.retain(|s| s != &crate::token::Token::WhiteSpace);
     log::debug!("lexed: {:?}", lexed);

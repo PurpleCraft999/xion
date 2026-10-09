@@ -32,11 +32,6 @@ fn to_str(input: Input) -> Output {
     input.first().map(|v| Value::String(v.to_string()))
 }
 
-pub fn instantiate(_: Input) -> Output {
-    log::error!("instantiate was called directly");
-    None
-}
-
 pub use lib::get_std_lib;
 
 mod lib {

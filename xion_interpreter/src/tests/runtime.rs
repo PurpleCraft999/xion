@@ -11,12 +11,19 @@ fn run(nodes: Vec<Node>) -> (RuntimeReturn, Runtime) {
     }
     (err.map(|s| s.as_value()), run)
 }
+use crate::parse_and_lex;
 macro_rules! run {
     ($nodes:expr) => {
         run($nodes).0
     };
     ($nodes:expr ; Runtime) => {
         run($nodes).1
+    };
+    (parse:$p:tt) => {
+        run(parse_and_lex($p)).0
+    };
+    (parse:$p:tt;Runtime) => {
+        run(parse_and_lex($p)).1
     };
 }
 
@@ -575,4 +582,10 @@ fn test_class_static_var_access() {
     ];
     let r = run!(nodes);
     assert_eq!(Ok(Some(Value::Number(3))), r);
+}
+
+#[test]
+fn use_constructor_in_class_body() {
+    let s = run!(parse:"class Test{ let static test = Test();   }");
+    assert_eq!(Ok(None), s)
 }

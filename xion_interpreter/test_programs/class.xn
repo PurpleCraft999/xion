@@ -4,7 +4,7 @@
 
 
 class Point{
-    let static originx = 0;
+    let static origin = Point();
     let x = 0;
     let y = 0;
     fn move(newX,newY){
@@ -13,5 +13,5 @@ class Point{
     }
 }
 
-print(Point.originx);
-
+print(Point(x:4,y:6));
+print(Point.origin);

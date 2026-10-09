@@ -385,7 +385,7 @@ pub enum Node {
     },
     FloatLiteral(f64),
 }
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 #[non_exhaustive]
 pub struct VariableAttributes {
     is_static: bool,

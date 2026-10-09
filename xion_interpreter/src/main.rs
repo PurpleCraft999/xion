@@ -27,7 +27,7 @@ fn main() {
         };
     }
     let path = PathBuf::from(main_file);
-    let nodes = xion_interpreter::parse_and_lex(&path);
+    let nodes = xion_interpreter::parse_and_lex_file(&path);
     debug!("running main");
 
     let mut runtime = match Runtime::main(nodes) {

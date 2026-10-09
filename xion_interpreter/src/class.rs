@@ -4,7 +4,7 @@ use crate::{
     functions::Function,
     runtime::{RuntimeError, RuntimeReturn, Scope, Variable},
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::hash::Hash;
 use std::sync::{Arc, Mutex};
@@ -23,8 +23,8 @@ impl RuntimeClass {
         methods: HashMap<String, Function>,
         static_fields: HashMap<String, Variable>,
     ) -> Result<Self, ClassDefinitionError> {
-        Self::verify_fields(&fields)?;
-        Self::verify_fields(&static_fields)?;
+        Self::verify_field_names(&fields.keys().collect())?;
+        Self::verify_field_names(&static_fields.keys().collect())?;
 
         if let Some((k, _)) = fields.iter().find(|(k, _)| static_fields.contains_key(*k)) {
             return Err(ClassDefinitionError::FieldNameDuplicate(k.to_owned()));
@@ -55,10 +55,10 @@ impl PartialEq for RuntimeClass {
     }
 }
 impl RuntimeClass {
-    fn verify_fields(fields: &HashMap<String, Variable>) -> Result<(), ClassDefinitionError> {
-        let reserved_field_names = ["class"];
+    fn verify_field_names(fields: &HashSet<&String>) -> Result<(), ClassDefinitionError> {
+        let reserved_field_names = ["class".to_string()];
         for name in reserved_field_names {
-            if fields.contains_key(name) {
+            if fields.contains(&name) {
                 return Err(ClassDefinitionError::ReservedFieldName(name.to_string()));
             }
         }
@@ -114,8 +114,9 @@ impl RuntimeClassInstance {
         result
     }
     pub fn get_field(&self, name: &str) -> Option<&Variable> {
-        self.fields.get(name).or(self.class.static_fields.get(name))
+        self.fields.get(name)
     }
+
     pub fn get_field_mut(&mut self, name: &str) -> Option<&mut Variable> {
         self.fields.get_mut(name)
     }

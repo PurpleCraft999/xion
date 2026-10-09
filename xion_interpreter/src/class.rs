@@ -12,21 +12,29 @@ use std::sync::{Arc, Mutex};
 #[derive(Debug, Clone)]
 pub struct RuntimeClass {
     pub(crate) class_path: ClassPath,
-    // pub(crate) name: String,
     pub(crate) fields: HashMap<String, Variable>,
     pub(crate) methods: HashMap<String, Function>,
+    pub(crate) static_fields: HashMap<String, Variable>,
 }
 impl RuntimeClass {
     pub fn new(
         class_path: ClassPath,
         fields: HashMap<String, Variable>,
         methods: HashMap<String, Function>,
+        static_fields: HashMap<String, Variable>,
     ) -> Result<Self, ClassDefinitionError> {
         Self::verify_fields(&fields)?;
+        Self::verify_fields(&static_fields)?;
+
+        if let Some((k, _)) = fields.iter().find(|(k, _)| static_fields.contains_key(*k)) {
+            return Err(ClassDefinitionError::FieldNameDuplicate(k.to_owned()));
+        }
+
         Ok(Self {
             class_path,
             fields,
             methods,
+            static_fields,
         })
     }
 
@@ -61,11 +69,16 @@ impl RuntimeClass {
 #[derive(Debug, PartialEq)]
 pub enum ClassDefinitionError {
     ReservedFieldName(String),
+    FieldNameDuplicate(String),
 }
 impl Display for ClassDefinitionError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::ReservedFieldName(e) => write!(f, "reserved field name \"{e}\" used in class "),
+            Self::FieldNameDuplicate(name) => write!(
+                f,
+                "two or more fields with the name {name} are defined in this class"
+            ),
         }
     }
 }
@@ -81,7 +94,7 @@ impl RuntimeClassInstance {
             return Err(RuntimeError::DoesNotExist(name.to_owned()));
         };
         let mut scope = Scope::new(self.class.name().to_string());
-        scope.vars = std::mem::take(&mut self.fields);
+        scope.variables = std::mem::take(&mut self.fields);
         let scope = Arc::new(Mutex::new(scope));
 
         let scope = Scope::with_mutable_parent(scope);
@@ -91,7 +104,7 @@ impl RuntimeClassInstance {
                 ParentScope::Mut(m) => {
                     self.fields = {
                         let loc = m.lock().expect("we are already panicing");
-                        loc.vars.clone()
+                        loc.variables.clone()
                     }
                 }
                 ParentScope::Normal(_) => panic!("parent was set to mut"),
@@ -101,13 +114,16 @@ impl RuntimeClassInstance {
         result
     }
     pub fn get_field(&self, name: &str) -> Option<&Variable> {
-        self.fields.get(name)
+        self.fields.get(name).or(self.class.static_fields.get(name))
     }
     pub fn get_field_mut(&mut self, name: &str) -> Option<&mut Variable> {
         self.fields.get_mut(name)
     }
     pub fn set_fields(&mut self, new: HashMap<String, Variable>) {
         self.fields = new;
+    }
+    pub fn class(&self) -> Arc<RuntimeClass> {
+        Arc::clone(&self.class)
     }
 }
 
@@ -123,7 +139,7 @@ impl std::fmt::Display for RuntimeClassInstance {
         for (name, var) in &self.fields {
             fields += name;
             fields.push(':');
-            fields += &var.get().to_string();
+            fields += &var.get_value().to_string();
             fields.push(',');
         }
         fields.pop();

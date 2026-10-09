@@ -4,7 +4,7 @@ use log::{debug, error};
 use xion_interpreter::runtime::Runtime;
 
 fn main() {
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Debug);
     log::set_boxed_logger(Box::new(simple_logger::SimpleLogger::new()))
         .expect("only returns error when the logger is already set");
 
@@ -12,7 +12,7 @@ fn main() {
 
     #[cfg(debug_assertions)]
     {
-        main_file = "xion_interpreter/test_programs/import_test.xn".to_string();
+        main_file = "xion_interpreter/test_programs/class.xn".to_string();
     }
 
     #[cfg(not(debug_assertions))]
@@ -37,6 +37,8 @@ fn main() {
             return;
         }
     };
+
+    debug!("{runtime:?}");
 
     match runtime.run() {
         Ok(_) => (),

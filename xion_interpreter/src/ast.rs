@@ -54,8 +54,14 @@ impl AstBuilder {
             body,
         })
     }
-    fn parse_var(&mut self) -> Result<Node, AstError> {
+    fn parse_var_declare(&mut self) -> Result<Node, AstError> {
         self.consume_if(|t| t == &Let);
+
+        let mut attrs = VariableAttributes::default();
+        if self.consume_if(|t| t == &Static) {
+            attrs.is_static = true;
+        }
+
         let Ok(name) = self.next_if_name() else {
             error!("no name after let");
             return Err(AstError::SyntaxError {
@@ -69,6 +75,7 @@ impl AstBuilder {
         let value = self.parse_next_expr(&SemiColon)?;
 
         Ok(Node::VarDeclare {
+            attributes: attrs,
             name,
             value: Box::new(value),
         })
@@ -92,10 +99,11 @@ impl AstBuilder {
             Import => self.parse_import(),
             If => self.parse_if_statement(),
             LeftBracket => self.parse_array(),
-            Let => self.parse_var(),
+            Let => self.parse_var_declare(),
             Fn => self.parse_function(),
             LeftBrace | RightBrace | RightParen | SemiColon | Comma | Colon | WhiteSpace
-            | Equals | EOF | Class | Plus | Asterisk | RightBracket | Division | Dot | IsEq => {
+            | Equals | EOF | Class | Plus | Asterisk | RightBracket | Division | Dot | IsEq
+            | Static => {
                 error!("unexpected token while parsing expresion: {:?}", token);
                 Err(AstError::UnexpectedToken)
             }
@@ -276,7 +284,7 @@ impl AstBuilder {
             let node = match token {
                 Class => self.parse_class(),
 
-                Let => self.parse_var(),
+                Let => self.parse_var_declare(),
 
                 Fn => self.parse_function(),
 
@@ -321,6 +329,7 @@ pub enum Node {
         body: Vec<Node>,
     },
     VarDeclare {
+        attributes: VariableAttributes,
         name: String,
         value: Box<Node>,
     },
@@ -376,6 +385,23 @@ pub enum Node {
     },
     FloatLiteral(f64),
 }
+#[derive(Debug, Clone, PartialEq, Default)]
+#[non_exhaustive]
+pub struct VariableAttributes {
+    is_static: bool,
+}
+impl VariableAttributes {
+    pub fn attr_static() -> Self {
+        Self {
+            is_static: true,
+            ..Default::default()
+        }
+    }
+    pub fn is_static(&self) -> bool {
+        self.is_static
+    }
+}
+
 #[derive(Debug, Clone)]
 #[cfg_attr(test, derive(PartialEq))]
 pub enum MathSign {

@@ -121,6 +121,7 @@ pub enum Token {
     Equals,
     EOF,
     Let,
+    Static,
     Name(String),
     StringLiteral(String),
     NumberLiteral(i64),
@@ -147,6 +148,7 @@ impl Token {
             "false" => BoolLiteral(false),
             "import" => Import,
             "if" => If,
+            "static" => Static,
             number if let Ok(num) = number.parse::<i64>() => NumberLiteral(num),
             name if is_name(name) => Name(name.to_string()),
 

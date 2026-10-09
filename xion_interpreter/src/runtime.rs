@@ -3,10 +3,10 @@ use std::fmt::{Debug, Display};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use log::{debug, error, warn};
+use log::{debug, error};
 
-use crate::ast::Node::*;
 use crate::ast::{MathSign, Node};
+use crate::ast::{Node::*, VariableAttributes};
 use crate::class::{ClassDefinitionError, ClassPath, RuntimeClass, RuntimeClassInstance};
 use crate::functions::{Function, NativeFunction, NativeFunctionHeader, NonNativeFunction};
 use crate::runtime::MathError::{InvalidTypeLeft, InvalidTypeRight};
@@ -53,24 +53,34 @@ impl Runtime {
 
     fn eval(&mut self, node: Node) -> RuntimeReturn {
         match node {
-            VarDeclare { name, value } => {
+            VarDeclare {
+                attributes,
+                name,
+                value,
+            } => {
                 let value = self.eval(*value)?.ok_or(RuntimeError::RequireValue)?;
-                self.get_current_scope_mut()
-                    .add_var(name.clone(), Variable::new(value))?;
+
+                let var = Variable::with_attributes(value, attributes);
+                self.get_current_scope_mut().add_var(name.clone(), var)?;
+
                 Ok(None)
             }
             StringLiteral(str) => Ok(Some(Value::String(str))),
             VarRef(var) => self
                 .get_current_scope()
-                .with_var(&var, |v| v.get().clone())
+                .with_var(&var, |v| v.get_value().clone())
                 .ok_or(RuntimeError::DoesNotExist(format!(
                     "cannot get variable \"{var}\""
                 )))
                 .map(Some),
 
             VarReasign { name, new_value } => {
-                let var = self.eval(*new_value)?.ok_or(RuntimeError::RequireValue)?;
-                if self.get_current_scope_mut().update_var(&name, var).is_err() {
+                let new_value = self.eval(*new_value)?.ok_or(RuntimeError::RequireValue)?;
+                if self
+                    .get_current_scope_mut()
+                    .with_var_mut(&name, |v| *v.get_value_mut() = new_value)
+                    .is_none()
+                {
                     Err(RuntimeError::DoesNotExist(format!(
                         "cannot reassign variable \"{name}\""
                     )))
@@ -103,8 +113,8 @@ impl Runtime {
                                 .expect("we declared a child scope")
                             {
                                 Some(ParentScope::Normal(Box::new(Scope {
-                                    vars: n
-                                        .vars
+                                    variables: n
+                                        .variables
                                         .clone()
                                         .into_iter()
                                         .map(|(k, v)| (k + INJECTED_VAR_NAME, v))
@@ -127,12 +137,12 @@ impl Runtime {
                             }
                             // //
                             // scope.vars.extend(class.fields.clone());
-                            scope.vars.extend(class.fields.clone());
+                            scope.variables.extend(class.fields.clone());
 
                             // should run any VarAssigns for the class
                             let mut runtime = Runtime::with_scope_and_nodes(arguments, scope);
                             runtime.run()?;
-                            instance.set_fields(runtime.current_scope.vars);
+                            instance.set_fields(runtime.current_scope.variables);
 
                             return Ok(Some(Value::Object(instance)));
                         }
@@ -180,7 +190,7 @@ impl Runtime {
                 let args = self.eval_list(args)?;
 
                 let s = self.get_current_scope_mut().with_var_mut(&var_name, |var| {
-                    match var.get_mut() {
+                    match var.get_value_mut() {
                         Value::Object(obj) => obj.call_method(&method_name, args),
                         o => Err(RuntimeError::TypeError {
                             actual_value: o.value_type(),
@@ -199,13 +209,51 @@ impl Runtime {
             FieldAccess {
                 var_name,
                 field_name,
-            } => Ok(self
-                .get_current_scope()
-                .with_var(&var_name, |var| match &var.get() {
-                    Value::Object(obj) => obj.get_field(&field_name).map(|v| v.get().clone()),
-                    _ => None,
-                })
-                .flatten()),
+            } => {
+                let x =
+                    self.get_current_scope()
+                        .with_var(&var_name, |var| match &var.get_value() {
+                            Value::Object(obj) => obj
+                                .get_field(&field_name)
+                                .map(|v| v.get_value().clone())
+                                .ok_or(RuntimeError::DoesNotExist(format!(
+                                    "field {field_name} in class {}",
+                                    obj.class().name()
+                                ))),
+                            Value::Class(class) => class
+                                .static_fields
+                                .get(&field_name)
+                                .map(|s| s.get_value().clone())
+                                .ok_or(RuntimeError::DoesNotExist(format!(
+                                    "static field {field_name} in class {}",
+                                    class.name()
+                                ))),
+                            v => Err(RuntimeError::TypeErrorMultiplePosibleValues {
+                                actual_value: v.value_type(),
+                                expected_values: vec![ValueType::Class, ValueType::Object],
+                            }),
+                        });
+
+                match x.map(|r| r.map(Some)) {
+                    Some(r) => r,
+                    None => Err(RuntimeError::DoesNotExist(format!(
+                        "cannot find {var_name}"
+                    ))),
+                }
+            }
+            // FieldAccess {
+            //     var_name,
+            //     field_name,
+            // } => *self
+            //     .get_current_scope()
+            //     .with_var(&var_name, |var| match &var.get_value() {
+            //         Value::Object(obj) => Ok(obj.get_field(&field_name).map(|v| v.get_value().clone())),
+            //         _ => {
+
+            //             Err(RuntimeError::RequireValue)
+            //         },
+            //      }).get_or_insert(Err(RuntimeError::DoesNotExist(format!("field {field_name} does not exist in class"))))
+            //.ok_or(),
             FieldReasign {
                 var_name,
                 field_name,
@@ -215,7 +263,7 @@ impl Runtime {
 
                 Ok(self
                     .get_current_scope_mut()
-                    .with_var_mut(&var_name, |var| match var.get_mut() {
+                    .with_var_mut(&var_name, |var| match var.get_value_mut() {
                         Value::Object(obj) => match obj.get_field_mut(&field_name) {
                             Some(v) => {
                                 v.value = new_value;
@@ -268,13 +316,14 @@ impl Runtime {
 
                 let runtime_class = RuntimeClass::new(
                     path,
-                    runtime.current_scope.vars,
+                    runtime.current_scope.variables,
                     runtime.current_scope.functions,
+                    runtime.current_scope.static_variables,
                 )
                 .map_err(RuntimeError::ClassDefinitionError)?;
                 self.get_current_scope_mut().add_class(runtime_class)?;
 
-                self.get_current_scope_mut().add_constructor(name)?;
+                // self.get_current_scope_mut().add_constructor(name)?;
                 Ok(None)
             }
             FnDeclare {
@@ -301,8 +350,8 @@ impl Runtime {
     fn child_scoped_no_var(&self) -> Scope {
         let scope = {
             let mut scope = self.get_current_scope().clone();
-            while !scope.vars.is_empty() {
-                scope.vars = HashMap::new();
+            while !scope.variables.is_empty() {
+                scope.variables = HashMap::new();
                 if let Some(s) = scope.parent_scope {
                     scope = match s {
                         ParentScope::Mut(m) => m.lock().expect("panicking").clone(),
@@ -369,6 +418,7 @@ pub enum Value {
     Array(Vec<Value>),
     Object(RuntimeClassInstance),
     Float(f64),
+    Class(Arc<RuntimeClass>),
 }
 impl Value {
     fn add(&self, other: &Value) -> Result<Value, MathError> {
@@ -389,7 +439,7 @@ impl Value {
                 Value::String(right) => Ok(Value::String(left.to_owned() + right)),
                 Value::Array(right) => Ok(Value::String(left.to_owned() + &vec_to_string(right))),
                 Value::Float(right) => Ok(Value::String(left.to_owned() + &right.to_string())),
-                Value::Object(_) => unimplemented!(),
+                _ => unimplemented!(),
             },
             Value::Array(left) => match other {
                 Value::String(right) => Ok(Value::String(vec_to_string(left) + right)),
@@ -401,7 +451,7 @@ impl Value {
                 Value::String(right) => Ok(Value::String(left.to_string() + right)),
                 e => Err(InvalidTypeRight(e.value_type())),
             },
-            Value::Object(_) => unimplemented!(),
+            _ => unimplemented!(),
         }
     }
     fn sub(&self, other: &Value) -> Result<Value, MathError> {
@@ -488,6 +538,7 @@ impl Value {
             Self::Object(_) => ValueType::Object,
             Self::String(_) => ValueType::String,
             Self::Float(_) => ValueType::Float,
+            Self::Class(_) => ValueType::Class,
         }
     }
     fn to_bool(&self) -> Option<bool> {
@@ -526,6 +577,24 @@ pub enum ValueType {
     Object,
     String,
     Float,
+    Class,
+}
+impl Display for ValueType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Array => "array",
+                Self::Bool => "bool",
+                Self::Class => "class",
+                Self::Int => "int",
+                Self::Float => "float",
+                Self::Object => "object",
+                Self::String => "string",
+            }
+        )
+    }
 }
 
 fn vec_to_string<T: ToString>(vec: &Vec<T>) -> String {
@@ -563,6 +632,7 @@ impl std::fmt::Display for Value {
             Self::Array(v) => vec_to_string(v),
             Self::Object(o) => o.to_string(),
             Self::Float(f) => f.to_string(),
+            Self::Class(c) => format!("{c:?}"),
         };
         write!(f, "{string_value}")
     }
@@ -611,7 +681,8 @@ impl ParentScope {
 pub struct Scope {
     name: String,
     pub(crate) parent_scope: Option<ParentScope>,
-    pub(crate) vars: HashMap<String, Variable>,
+    pub(crate) variables: HashMap<String, Variable>,
+    static_variables: HashMap<String, Variable>,
     functions: HashMap<String, Function>,
     classes: HashMap<String, Arc<RuntimeClass>>,
 }
@@ -620,9 +691,10 @@ impl Scope {
         Self {
             name,
             parent_scope: None,
-            vars: HashMap::new(),
+            variables: HashMap::new(),
             functions: HashMap::new(),
             classes: HashMap::new(),
+            static_variables: HashMap::new(),
         }
     }
     //clippy falsly flag this
@@ -674,48 +746,56 @@ impl Scope {
     }
 
     pub fn add_var(&mut self, name: String, var: Variable) -> Result<(), RuntimeError> {
-        if self.vars.contains_key(&name) {
+        if self.variables.contains_key(&name) {
             return Err(RuntimeError::AlreadyExists(format!(
                 "cannot create variable \"{name}\""
             )));
         }
 
-        self.vars.insert(name, var);
+        if var.attributes.is_static() {
+            self.static_variables.insert(name, var);
+        } else {
+            self.variables.insert(name, var);
+        }
+
         Ok(())
     }
 
-    pub fn update_var(&mut self, name: &str, var_value: Value) -> Result<(), RuntimeError> {
-        match self.vars.get_mut(name) {
-            Some(value) => {
-                *value.get_mut() = var_value;
-                Ok(())
-            }
-            None => {
-                if let Some(parent) = &self.parent_scope {
-                    match parent {
-                        ParentScope::Mut(parent) => {
-                            if let Some(var) =
-                                parent.lock().expect("we are panicing").vars.get_mut(name)
-                            {
-                                *var.get_mut() = var_value;
-                                Ok(())
-                            } else {
-                                Err(RuntimeError::DoesNotExist(name.to_owned()))
-                            }
-                        }
-                        ParentScope::Normal(parent) => {
-                            if parent.vars.contains_key(name) {
-                                warn!("tried to update read only variable from parent scope")
-                            }
-                            Err(RuntimeError::DoesNotExist(name.to_owned()))
-                        }
-                    }
-                } else {
-                    Err(RuntimeError::DoesNotExist(name.to_owned()))
-                }
-            }
-        }
-    }
+    // pub fn update_var(&mut self, name: &str, var_value: Value) -> Result<(), RuntimeError> {
+    //     match self.variables.get_mut(name) {
+    //         Some(value) => {
+    //             *value.get_mut() = var_value;
+    //             Ok(())
+    //         }
+    //         None => {
+    //             if let Some(parent) = &self.parent_scope {
+    //                 match parent {
+    //                     ParentScope::Mut(parent) => {
+    //                         if let Some(var) = parent
+    //                             .lock()
+    //                             .expect("we are panicing")
+    //                             .variables
+    //                             .get_mut(name)
+    //                         {
+    //                             *var.get_mut() = var_value;
+    //                             Ok(())
+    //                         } else {
+    //                             Err(RuntimeError::DoesNotExist(name.to_owned()))
+    //                         }
+    //                     }
+    //                     ParentScope::Normal(parent) => {
+    //                         if parent.variables.contains_key(name) {
+    //                             warn!("tried to update read only variable from parent scope")
+    //                         }
+    //                         Err(RuntimeError::DoesNotExist(name.to_owned()))
+    //                     }
+    //                 }
+    //             } else {
+    //                 Err(RuntimeError::DoesNotExist(name.to_owned()))
+    //             }
+    //         }
+    //     }
+    // }
 
     pub fn add_func(&mut self, func: NonNativeFunction) -> Result<(), RuntimeError> {
         if self.functions.contains_key(func.name()) {
@@ -735,24 +815,31 @@ impl Scope {
         name: &str,
         closure: impl FnOnce(&mut Variable) -> T,
     ) -> Option<T> {
-        match self.vars.get_mut(name) {
+        match self.variables.get_mut(name) {
             Some(v) => Some(closure(v)),
             None => {
-                if let Some(parent) = &mut self.parent_scope {
+                if let Some(var) = self.static_variables.get_mut(name) {
+                    Some(closure(var))
+                } else if let Some(parent) = &mut self.parent_scope {
                     parent.with_var_mut(name, closure)
                 } else {
+                    error!("field {name} does not exist");
+
                     None
                 }
             }
         }
     }
     pub fn with_var<T>(&self, name: &str, closure: impl FnOnce(&Variable) -> T) -> Option<T> {
-        match self.vars.get(name) {
+        match self.variables.get(name) {
             Some(v) => Some(closure(v)),
             None => {
-                if let Some(parent) = &self.parent_scope {
+                if let Some(var) = self.variables.get(name) {
+                    Some(closure(var))
+                } else if let Some(parent) = &self.parent_scope {
                     parent.with_var(name, closure)
                 } else {
+                    error!("field {name} does not exist");
                     None
                 }
             }
@@ -778,9 +865,11 @@ impl Scope {
                 class.name()
             )));
         }
-
+        let class = Arc::new(class);
         self.classes
-            .insert(class.name().to_owned(), Arc::new(class));
+            .insert(class.name().to_owned(), Arc::clone(&class));
+        self.add_constructor(class.name().to_string())?;
+        self.add_var(class.name().to_string(), Variable::new(Value::Class(class)))?;
         Ok(())
     }
     pub fn get_class(&self, name: &str) -> Option<Arc<RuntimeClass>> {
@@ -799,7 +888,7 @@ impl Scope {
                 Function::Native(f) => self.add_native_fn(&name, f.inner()),
             }?
         }
-        for (name, var) in other.vars {
+        for (name, var) in other.variables {
             self.add_var(name, var)?
         }
         for (_, class) in other.classes {
@@ -881,15 +970,23 @@ pub fn make_module(name: &str) -> Result<Scope, RuntimeError> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Variable {
     value: Value,
+    attributes: VariableAttributes,
 }
 impl Variable {
     pub fn new(value: Value) -> Self {
-        Self { value }
+        Self {
+            value,
+            attributes: VariableAttributes::default(),
+        }
     }
-    pub fn get(&self) -> &Value {
+    pub fn with_attributes(value: Value, attributes: VariableAttributes) -> Self {
+        Self { value, attributes }
+    }
+
+    pub fn get_value(&self) -> &Value {
         &self.value
     }
-    pub fn get_mut(&mut self) -> &mut Value {
+    pub fn get_value_mut(&mut self) -> &mut Value {
         &mut self.value
     }
 }
@@ -904,6 +1001,10 @@ pub enum RuntimeError {
     TypeError {
         actual_value: ValueType,
         expected_value: ValueType,
+    },
+    TypeErrorMultiplePosibleValues {
+        actual_value: ValueType,
+        expected_values: Vec<ValueType>,
     },
     ClassDefinitionError(ClassDefinitionError),
 }
@@ -926,6 +1027,14 @@ impl Display for RuntimeError {
                 f,
                 "a value of type {:?} was expected but a value of {:?} was found instead",
                 actual_value, expected_value
+            ),
+            RuntimeError::TypeErrorMultiplePosibleValues {
+                actual_value,
+                expected_values,
+            } => write!(
+                f,
+                "a type of {actual_value} was found but types {} were expected",
+                vec_to_string(expected_values)
             ),
             RuntimeError::ClassDefinitionError(e) => write!(f, "{e}"),
         }

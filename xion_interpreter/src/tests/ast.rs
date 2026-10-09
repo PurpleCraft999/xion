@@ -3,6 +3,7 @@ use crate::{
         AstBuilder,
         MathSign::Multiply,
         Node::{self, StringLiteral, *},
+        VariableAttributes,
     },
     token::Token::{self, *},
 };
@@ -29,6 +30,8 @@ fn var_declaration() {
     ]);
     assert_eq!(
         vec![VarDeclare {
+            attributes: VariableAttributes::default(),
+
             name: "var_name".to_string(),
             value: Box::new(Node::NumberLiteral(50))
         }],
@@ -157,6 +160,8 @@ fn class_delcaration_with_variable() {
         vec![Node::ClassDeclare {
             name: "MyClass".to_string(),
             body: vec![VarDeclare {
+                attributes: VariableAttributes::default(),
+
                 name: "field".to_string(),
                 value: Box::new(StringLiteral("hello world".to_string()))
             }]
@@ -262,6 +267,8 @@ fn if_statment() {
         vec![Node::If {
             condition: Box::new(Node::BoolLiteral(true)),
             body: vec![Node::VarDeclare {
+                attributes: VariableAttributes::default(),
+
                 name: "x".to_string(),
                 value: Box::new(Node::BoolLiteral(false))
             }]
@@ -326,4 +333,27 @@ fn parse_floating_point() {
         SemiColon,
     ]);
     assert_eq!(vec![Node::FloatLiteral(37.432)], ast);
+}
+
+#[test]
+fn parse_static_var() {
+    let ast = ast(vec![
+        Let,
+        Static,
+        Name("var"),
+        Equals,
+        Token::NumberLiteral(2),
+        SemiColon,
+    ]);
+    assert_eq!(
+        vec![VarDeclare {
+            attributes: VariableAttributes {
+                is_static: true,
+                ..Default::default()
+            },
+            name: "var".to_string(),
+            value: Box::new(Node::NumberLiteral(2))
+        }],
+        ast
+    );
 }

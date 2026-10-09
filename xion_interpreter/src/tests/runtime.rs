@@ -1,4 +1,4 @@
-use crate::ast::AstBuilder;
+use crate::ast::{AstBuilder, VariableAttributes};
 
 use super::*;
 
@@ -35,10 +35,14 @@ fn test_number_and_string_literals() {
 fn test_variable_declaration_and_reference() {
     let nodes = vec![
         Node::VarDeclare {
+            attributes: VariableAttributes::default(),
+
             name: "x".to_string(),
             value: Box::new(Node::NumberLiteral(100)),
         },
         Node::VarDeclare {
+            attributes: VariableAttributes::default(),
+
             name: "y".to_string(),
             value: Box::new(Node::VarRef("x".to_string())),
         },
@@ -50,7 +54,7 @@ fn test_variable_declaration_and_reference() {
     assert!(
         scope
             .with_var("y", |var_y| {
-                assert_eq!(*var_y.get(), Value::Number(100));
+                assert_eq!(*var_y.get_value(), Value::Number(100));
             })
             .is_some(),
         "var y should exist"
@@ -61,6 +65,8 @@ fn test_variable_declaration_and_reference() {
 fn test_variable_reassignment() {
     let nodes = vec![
         Node::VarDeclare {
+            attributes: VariableAttributes::default(),
+
             name: "x".to_string(),
             value: Box::new(Node::NumberLiteral(10)),
         },
@@ -76,7 +82,7 @@ fn test_variable_reassignment() {
     assert!(
         scope
             .with_var("x", |var_x| {
-                assert_eq!(*var_x.get(), Value::Number(20));
+                assert_eq!(*var_x.get_value(), Value::Number(20));
             })
             .is_some(),
         "var x should exist"
@@ -86,6 +92,8 @@ fn test_variable_reassignment() {
 #[test]
 fn test_math_operations() {
     let nodes = vec![Node::VarDeclare {
+        attributes: VariableAttributes::default(),
+
         name: "result".to_string(),
         value: Box::new(Node::Math {
             left: Box::new(Node::Math {
@@ -113,7 +121,7 @@ fn test_math_operations() {
     assert!(
         scope
             .with_var("result", |var_x| {
-                assert_eq!(*var_x.get(), Value::Number(28));
+                assert_eq!(*var_x.get_value(), Value::Number(28));
             })
             .is_some(),
         "var result should exist"
@@ -135,6 +143,8 @@ fn test_return_statement() {
 #[test]
 fn test_array_literal_evaluation() {
     let nodes = vec![Node::VarDeclare {
+        attributes: VariableAttributes::default(),
+
         name: "arr".to_string(),
         value: Box::new(Node::ArrayLiteral(vec![
             Node::NumberLiteral(1),
@@ -148,7 +158,7 @@ fn test_array_literal_evaluation() {
     let scope = runtime.get_current_scope();
     assert!(
         scope
-            .with_var("arr", |arr_var| match &*arr_var.get() {
+            .with_var("arr", |arr_var| match &*arr_var.get_value() {
                 Value::Array(vec) => {
                     assert_eq!(vec.len(), 3);
                     assert_eq!(vec[0], Value::Number(1));
@@ -191,6 +201,8 @@ fn test_function_call() {
             })))],
         },
         Node::VarDeclare {
+            attributes: VariableAttributes::default(),
+
             name: "res".to_string(),
             value: Box::new(Node::FnCall {
                 name: "add_one".to_string(),
@@ -205,7 +217,7 @@ fn test_function_call() {
     assert!(
         scope
             .with_var("res", |var| {
-                assert_eq!(*var.get(), Value::Number(11));
+                assert_eq!(*var.get_value(), Value::Number(11));
             })
             .is_some(),
         "variable res should equal 11"
@@ -217,6 +229,8 @@ fn test_class_declare() {
     let nodes = vec![Node::ClassDeclare {
         name: "Point".to_string(),
         body: vec![Node::VarDeclare {
+            attributes: VariableAttributes::default(),
+
             name: "x".to_string(),
             value: Box::new(Node::NumberLiteral(5)),
         }],
@@ -235,17 +249,23 @@ fn test_class_declare() {
 fn test_constructor_var_assigned_to_field() {
     let nodes = vec![
         Node::VarDeclare {
+            attributes: VariableAttributes::default(),
+
             name: "initial_val".to_string(),
             value: Box::new(Node::NumberLiteral(77)),
         },
         Node::ClassDeclare {
             name: "BoxObj".to_string(),
             body: vec![Node::VarDeclare {
+                attributes: VariableAttributes::default(),
+
                 name: "val".to_string(),
                 value: Box::new(Node::NumberLiteral(0)),
             }],
         },
         Node::VarDeclare {
+            attributes: VariableAttributes::default(),
+
             name: "obj".to_string(),
             value: Box::new(Node::FnCall {
                 name: "BoxObj".to_string(),
@@ -263,9 +283,9 @@ fn test_constructor_var_assigned_to_field() {
     assert!(
         scope
             .with_var("obj", |var| {
-                if let Value::Object(obj) = var.get() {
+                if let Value::Object(obj) = var.get_value() {
                     let field = obj.get_field("val").expect("field val should exist");
-                    assert_eq!(*field.get(), Value::Number(77));
+                    assert_eq!(*field.get_value(), Value::Number(77));
                 } else {
                     panic!("Expected Value::Object");
                 }
@@ -279,17 +299,23 @@ fn test_constructor_var_assigned_to_field() {
 fn test_constructor_var_assigned_to_field_shared_name() {
     let nodes = vec![
         Node::VarDeclare {
+            attributes: VariableAttributes::default(),
+
             name: "x".to_string(),
             value: Box::new(Node::NumberLiteral(100)),
         },
         Node::ClassDeclare {
             name: "Container".to_string(),
             body: vec![Node::VarDeclare {
+                attributes: VariableAttributes::default(),
+
                 name: "x".to_string(),
                 value: Box::new(Node::NumberLiteral(0)),
             }],
         },
         Node::VarDeclare {
+            attributes: VariableAttributes::default(),
+
             name: "cnt".to_string(),
             value: Box::new(Node::FnCall {
                 name: "Container".to_string(),
@@ -307,9 +333,9 @@ fn test_constructor_var_assigned_to_field_shared_name() {
     assert!(
         scope
             .with_var("cnt", |var| {
-                if let Value::Object(obj) = var.get() {
+                if let Value::Object(obj) = var.get_value() {
                     let field_x = obj.get_field("x").expect("field x should exist");
-                    assert_eq!(*field_x.get(), Value::Number(100));
+                    assert_eq!(*field_x.get_value(), Value::Number(100));
                 } else {
                     panic!("Expected Value::Object");
                 }
@@ -325,11 +351,15 @@ fn test_field_access() {
         Node::ClassDeclare {
             name: "Item".to_string(),
             body: vec![Node::VarDeclare {
+                attributes: VariableAttributes::default(),
+
                 name: "price".to_string(),
                 value: Box::new(Node::NumberLiteral(250)),
             }],
         },
         Node::VarDeclare {
+            attributes: VariableAttributes::default(),
+
             name: "item".to_string(),
             value: Box::new(Node::FnCall {
                 name: "Item".to_string(),
@@ -337,6 +367,8 @@ fn test_field_access() {
             }),
         },
         Node::VarDeclare {
+            attributes: VariableAttributes::default(),
+
             name: "fetched_price".to_string(),
             value: Box::new(Node::FieldAccess {
                 var_name: "item".to_string(),
@@ -351,7 +383,7 @@ fn test_field_access() {
     assert!(
         scope
             .with_var("fetched_price", |var| {
-                assert_eq!(*var.get(), Value::Number(250));
+                assert_eq!(*var.get_value(), Value::Number(250));
             })
             .is_some(),
         "fetched_price should equal 250"
@@ -364,11 +396,15 @@ fn test_field_reassignment() {
         Node::ClassDeclare {
             name: "Account".to_string(),
             body: vec![Node::VarDeclare {
+                attributes: VariableAttributes::default(),
+
                 name: "balance".to_string(),
                 value: Box::new(Node::NumberLiteral(50)),
             }],
         },
         Node::VarDeclare {
+            attributes: VariableAttributes::default(),
+
             name: "acc".to_string(),
             value: Box::new(Node::FnCall {
                 name: "Account".to_string(),
@@ -388,11 +424,11 @@ fn test_field_reassignment() {
     assert!(
         scope
             .with_var("acc", |var| {
-                if let Value::Object(obj) = var.get() {
+                if let Value::Object(obj) = var.get_value() {
                     let balance_field = obj
                         .get_field("balance")
                         .expect("balance field should exist");
-                    assert_eq!(*balance_field.get(), Value::Number(150));
+                    assert_eq!(*balance_field.get_value(), Value::Number(150));
                 } else {
                     panic!("Expected Value::Object");
                 }
@@ -409,6 +445,8 @@ fn test_method_call() {
             name: "Wallet".to_string(),
             body: vec![
                 Node::VarDeclare {
+                    attributes: VariableAttributes::default(),
+
                     name: "total".to_string(),
                     value: Box::new(Node::NumberLiteral(10)),
                 },
@@ -423,6 +461,7 @@ fn test_method_call() {
             ],
         },
         Node::VarDeclare {
+            attributes: VariableAttributes::default(),
             name: "w".to_string(),
             value: Box::new(Node::FnCall {
                 name: "Wallet".to_string(),
@@ -499,7 +538,7 @@ let n =(""+5.0);"#,
 
     assert!(
         run.current_scope
-            .vars
+            .variables
             .into_iter()
             .all(|(k, v)| expected.get(&k).unwrap() == &v)
     );
@@ -516,4 +555,24 @@ fn test_nested_return() {
     ];
     let r = run!(nodes);
     assert_eq!(Ok(Some(Value::Bool(true))), r);
+}
+
+#[test]
+fn test_class_static_var_access() {
+    let nodes = vec![
+        ClassDeclare {
+            name: "Test".to_string(),
+            body: vec![Node::VarDeclare {
+                attributes: VariableAttributes::attr_static(),
+                name: "test".to_string(),
+                value: Box::new(NumberLiteral(3)),
+            }],
+        },
+        Node::Return(Some(Box::new(FieldAccess {
+            var_name: "Test".into(),
+            field_name: "test".into(),
+        }))),
+    ];
+    let r = run!(nodes);
+    assert_eq!(Ok(Some(Value::Number(3))), r);
 }

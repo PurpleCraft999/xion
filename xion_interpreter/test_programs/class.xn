@@ -1,9 +1,10 @@
 
-let point = Point(x:50);
+#let point = Point(x:50);
 
 
 
 class Point{
+    let static originx = 0;
     let x = 0;
     let y = 0;
     fn move(newX,newY){
@@ -12,5 +13,5 @@ class Point{
     }
 }
 
-
+print(Point.originx);
 

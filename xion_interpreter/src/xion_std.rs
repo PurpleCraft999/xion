@@ -1,3 +1,5 @@
+use std::time::{Duration, SystemTime};
+
 use crate::Value;
 type Input = Vec<Value>;
 type Output = Option<Value>;
@@ -31,8 +33,58 @@ fn input(_: Vec<Value>) -> Option<Value> {
 fn to_str(input: Input) -> Output {
     input.first().map(|v| Value::String(v.to_string()))
 }
+fn time(_: Input) -> Output {
+    match std::time::SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
+        Ok(t) => Some(Value::Float(t.as_secs_f64())),
+        Err(s) => {
+            error!(
+                "system time is behind the unix epoch by {} seconds",
+                s.duration().as_secs()
+            );
+
+            None
+        }
+    }
+}
+/// returns 0 if slept
+///
+/// returns 1 if type was invalid
+///
+/// returns 2 if int was negative
+///
+/// returns 3 if no value was passed
+///
+/// sleeps for said amount of seconds
+fn sleep(input: Input) -> Output {
+    if let Some(v) = input.first() {
+        match v {
+            Value::Number(i) => {
+                if *i < 0 {
+                    return Some(Value::Number(2));
+                }
+
+                std::thread::sleep(Duration::from_secs(*i as u64));
+
+                Some(Value::Number(0))
+            }
+            Value::Float(f) => {
+                if *f < 0.0 {
+                    return Some(Value::Number(2));
+                }
+
+                std::thread::sleep(Duration::from_secs_f64(*f));
+
+                Some(Value::Number(0))
+            }
+            _ => Some(Value::Number(1)),
+        }
+    } else {
+        Some(Value::Number(3))
+    }
+}
 
 pub use lib::get_std_lib;
+use log::error;
 
 mod lib {
     use super::*;
@@ -68,6 +120,11 @@ mod lib {
 
                 Ok(())
             },
+            "time"=>|scope|{
+                scope.add_native_fn("time", time)?;
+                scope.add_native_fn("sleep",sleep)?;
+                Ok(())
+            }
         }
         map
     }

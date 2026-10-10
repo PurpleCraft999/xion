@@ -1,0 +1,4 @@
+import time;
+
+print(time());
+print(sleep(1));

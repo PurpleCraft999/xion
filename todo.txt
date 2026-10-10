@@ -6,6 +6,7 @@ consider merging two arrays with +
 while loops
 for loops
 better functions
+better native functions
 conversion functions for types
 add std objects
 

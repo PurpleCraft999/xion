@@ -167,10 +167,10 @@ fn test_array_literal_evaluation() {
         scope
             .with_var("arr", |arr_var| match &*arr_var.get_value() {
                 Value::Array(vec) => {
-                    assert_eq!(vec.len(), 3);
-                    assert_eq!(vec[0], Value::Number(1));
-                    assert_eq!(vec[1], Value::String("test".to_string()));
-                    assert_eq!(vec[2], Value::Bool(true));
+                    assert_eq!(vec.0.len(), 3);
+                    assert_eq!(vec.0[0], Value::Number(1));
+                    assert_eq!(vec.0[1], Value::String("test".to_string()));
+                    assert_eq!(vec.0[2], Value::Bool(true));
                 }
                 _ => panic!("Expected Value::Array"),
             })

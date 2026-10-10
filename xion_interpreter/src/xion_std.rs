@@ -1,10 +1,11 @@
-use std::time::{Duration, SystemTime};
-
 use crate::Value;
-type Input = Vec<Value>;
-type Output = Option<Value>;
-
-fn print(values: Vec<Value>) -> Option<Value> {
+use crate::functions::NativeFunction;
+use crate::runtime::FromValue;
+use crate::runtime::RuntimeError;
+use std::time::{Duration, SystemTime};
+use xion_interpreter_proc_macros::native_function;
+#[native_function]
+fn print(values: Vec<Value>) {
     if values.len() == 1 {
         println!("{}", values[0])
     } else if values.is_empty() {
@@ -18,31 +19,34 @@ fn print(values: Vec<Value>) -> Option<Value> {
         }
         println!()
     }
-    None
 }
-
-fn input(_: Vec<Value>) -> Option<Value> {
+#[native_function]
+fn input() -> String {
     let mut out = String::new();
     match std::io::stdin().read_line(&mut out) {
         Ok(_) => (),
         Err(err) => println!("Error reading input steam {err}"),
     }
-    Some(Value::String(out.trim().to_string()))
+    out.trim().to_string()
+}
+#[native_function]
+fn to_str(input: Value) -> String {
+    input.to_string()
 }
 
-fn to_str(input: Input) -> Output {
-    input.first().map(|v| Value::String(v.to_string()))
-}
-fn time(_: Input) -> Output {
+///returns -1.0 if system time is before unix_epoch
+/// returns current time in seconds otherwise
+#[native_function]
+fn time() -> f64 {
     match std::time::SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
-        Ok(t) => Some(Value::Float(t.as_secs_f64())),
+        Ok(t) => t.as_secs_f64(),
         Err(s) => {
             error!(
                 "system time is behind the unix epoch by {} seconds",
                 s.duration().as_secs()
             );
 
-            None
+            -1f64
         }
     }
 }
@@ -52,34 +56,29 @@ fn time(_: Input) -> Output {
 ///
 /// returns 2 if int was negative
 ///
-/// returns 3 if no value was passed
-///
 /// sleeps for said amount of seconds
-fn sleep(input: Input) -> Output {
-    if let Some(v) = input.first() {
-        match v {
-            Value::Number(i) => {
-                if *i < 0 {
-                    return Some(Value::Number(2));
-                }
-
-                std::thread::sleep(Duration::from_secs(*i as u64));
-
-                Some(Value::Number(0))
+#[native_function]
+fn sleep(input: Value) -> i64 {
+    match input {
+        Value::Number(i) => {
+            if i < 0 {
+                return 2;
             }
-            Value::Float(f) => {
-                if *f < 0.0 {
-                    return Some(Value::Number(2));
-                }
 
-                std::thread::sleep(Duration::from_secs_f64(*f));
+            std::thread::sleep(Duration::from_secs(i as u64));
 
-                Some(Value::Number(0))
-            }
-            _ => Some(Value::Number(1)),
+            0
         }
-    } else {
-        Some(Value::Number(3))
+        Value::Float(f) => {
+            if f < 0.0 {
+                return 2;
+            }
+
+            std::thread::sleep(Duration::from_secs_f64(f));
+
+            0
+        }
+        _ => 1,
     }
 }
 
@@ -109,20 +108,26 @@ mod lib {
 
     fn build_default_libs() -> HashMap<String, crate::runtime::Scope> {
         let mut map = HashMap::new();
+
         lib! {map,"lang"=>|scope|{
-            scope.add_native_fn("print", print)?;
-            scope.add_native_fn("str",to_str)?;
+            scope.add_native_fn("print", PrintFn)?;
+            scope.add_native_fn("str",ToStrFn)?;
+
+
+
+
             Ok(())
             },
             "io"=>|scope|{
 
-                scope.add_native_fn("input", input)?;
+
+                scope.add_native_fn("input", InputFn)?;
 
                 Ok(())
             },
             "time"=>|scope|{
-                scope.add_native_fn("time", time)?;
-                scope.add_native_fn("sleep",sleep)?;
+                scope.add_native_fn("time", TimeFn)?;
+                scope.add_native_fn("sleep",SleepFn)?;
                 Ok(())
             }
         }

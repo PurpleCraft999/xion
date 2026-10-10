@@ -8,7 +8,7 @@ use log::{debug, error};
 use crate::ast::{MathSign, Node};
 use crate::ast::{Node::*, VariableAttributes};
 use crate::class::{ClassDefinitionError, ClassPath, RuntimeClass, RuntimeClassInstance};
-use crate::functions::{Function, NativeFunction, NativeFunctionHeader, NonNativeFunction};
+use crate::functions::{Function, NativeFunction, NonNativeFunction};
 use crate::runtime::MathError::{InvalidTypeLeft, InvalidTypeRight};
 use crate::runtime::RuntimeError::{DoesNotExist, Other};
 use crate::{parse_and_lex_file, xion_std};
@@ -185,7 +185,7 @@ impl Runtime {
                     value.map(Some).map_err(RuntimeError::MathError)
                 }
             }
-            ArrayLiteral(vec) => Ok(Some(Value::Array(self.eval_list(vec)?))),
+            ArrayLiteral(vec) => Ok(Some(Value::Array(Array(self.eval_list(vec)?)))),
             MethodCall {
                 var_name,
                 method_name,
@@ -414,12 +414,13 @@ impl Runtime {
         })
     }
 }
+#[xion_interpreter_proc_macros::value_helper]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     String(String),
     Number(i64),
     Bool(bool),
-    Array(Vec<Value>),
+    Array(Array),
     Object(RuntimeClassInstance),
     Float(f64),
     Class(Arc<RuntimeClass>),
@@ -441,12 +442,12 @@ impl Value {
                 Value::Bool(right) => Ok(Value::String(left.to_owned() + &(right.to_string()))),
                 Value::Number(right) => Ok(Value::String(left.to_owned() + &(right.to_string()))),
                 Value::String(right) => Ok(Value::String(left.to_owned() + right)),
-                Value::Array(right) => Ok(Value::String(left.to_owned() + &vec_to_string(right))),
+                Value::Array(right) => Ok(Value::String(left.to_owned() + &right.to_string())),
                 Value::Float(right) => Ok(Value::String(left.to_owned() + &right.to_string())),
                 _ => unimplemented!(),
             },
             Value::Array(left) => match other {
-                Value::String(right) => Ok(Value::String(vec_to_string(left) + right)),
+                Value::String(right) => Ok(Value::String(left.to_string() + right)),
                 e => Err(MathError::InvalidTypeRight(e.value_type())),
             },
             Value::Float(left) => match other {
@@ -554,10 +555,27 @@ impl Value {
         }
     }
 }
-impl From<String> for Value {
-    fn from(value: String) -> Self {
-        Value::String(value)
+
+impl FromValue for Value {
+    fn from_value(value: Value) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        Some(value)
     }
+}
+#[derive(Debug, Clone, PartialEq)]
+pub struct Array(Vec<Value>);
+impl Display for Array {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Array{}", vec_to_string(&self.0))
+    }
+}
+
+pub trait FromValue {
+    fn from_value(value: Value) -> Option<Self>
+    where
+        Self: Sized;
 }
 #[derive(Debug, Clone)]
 pub enum FunctionReturn {
@@ -633,7 +651,7 @@ impl std::fmt::Display for Value {
             Self::Bool(b) => b.to_string(),
             Self::Number(n) => n.to_string(),
             Self::String(s) => s.to_owned(),
-            Self::Array(v) => vec_to_string(v),
+            Self::Array(v) => v.to_string(),
             Self::Object(o) => o.to_string(),
             Self::Float(f) => f.to_string(),
             Self::Class(c) => format!("{c:?}"),
@@ -704,7 +722,14 @@ impl Scope {
     pub fn add_native_fn(
         &mut self,
         name: &str,
-        func: NativeFunctionHeader,
+        func: impl NativeFunction + 'static,
+    ) -> Result<(), RuntimeError> {
+        self.copy_native_function(name, Arc::new(func))
+    }
+    fn copy_native_function(
+        &mut self,
+        name: &str,
+        func: Arc<dyn NativeFunction>,
     ) -> Result<(), RuntimeError> {
         if self.functions.contains_key(name) {
             Err(RuntimeError::AlreadyExists(format!(
@@ -712,7 +737,7 @@ impl Scope {
             )))
         } else {
             self.functions
-                .insert(name.to_owned(), Function::Native(NativeFunction::new(func)));
+                .insert(name.to_owned(), Function::Native(func));
             Ok(())
         }
     }
@@ -865,7 +890,7 @@ impl Scope {
         for (name, func) in other.functions {
             match func {
                 Function::NonNative(f) => self.add_func(f),
-                Function::Native(f) => self.add_native_fn(&name, f.inner()),
+                Function::Native(f) => self.copy_native_function(&name, f),
             }?
         }
         for (name, var) in other.variables {
@@ -987,6 +1012,10 @@ pub enum RuntimeError {
         expected_values: Vec<ValueType>,
     },
     ClassDefinitionError(ClassDefinitionError),
+    FnCallArgLengthMixMatch {
+        expected: usize,
+        found: usize,
+    },
 }
 
 impl Display for RuntimeError {
@@ -1017,6 +1046,10 @@ impl Display for RuntimeError {
                 vec_to_string(expected_values)
             ),
             RuntimeError::ClassDefinitionError(e) => write!(f, "{e}"),
+            RuntimeError::FnCallArgLengthMixMatch { expected, found } => write!(
+                f,
+                "when calling function _ found {found} number of args but expected {expected} number of args"
+            ),
         }
     }
 }

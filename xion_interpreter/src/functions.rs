@@ -1,36 +1,25 @@
 use crate::{
     Value,
     ast::Node,
-    runtime::{Runtime, Scope, Variable},
+    runtime::{Runtime, RuntimeError, Scope, Variable},
 };
 
 #[derive(Debug, Clone)]
 pub enum Function {
     NonNative(NonNativeFunction),
-    Native(NativeFunction),
+    Native(std::sync::Arc<dyn NativeFunction>),
 }
 impl Function {
     pub fn call(&self, args: Vec<Value>, scope: Scope) -> crate::runtime::RuntimeReturn {
         match self {
             Self::NonNative(f) => f.call(args, scope),
-            Self::Native(f) => Ok((f.func)(args)),
+            Self::Native(f) => f.call(args),
         }
     }
 }
 
-pub type NativeFunctionHeader = fn(Vec<Value>) -> Option<Value>;
-
-#[derive(Debug, Clone)]
-pub struct NativeFunction {
-    func: NativeFunctionHeader,
-}
-impl NativeFunction {
-    pub fn new(func: NativeFunctionHeader) -> Self {
-        Self { func }
-    }
-    pub fn inner(self) -> NativeFunctionHeader {
-        self.func
-    }
+pub trait NativeFunction: std::fmt::Debug + Send + Sync {
+    fn call(&self, args: Vec<Value>) -> Result<Option<Value>, RuntimeError>;
 }
 
 #[derive(Debug, Clone)]

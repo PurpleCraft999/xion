@@ -6,12 +6,11 @@ consider merging two arrays with +
 while loops
 for loops
 better functions
-better native functions
 conversion functions for types
 add std objects
 
-
-
+function call into method_call. eg return_string().len();
+static methods
 
 Make toml for imports instead
 

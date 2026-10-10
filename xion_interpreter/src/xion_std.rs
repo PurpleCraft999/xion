@@ -4,6 +4,7 @@ use crate::runtime::FromValue;
 use crate::runtime::RuntimeError;
 use std::time::{Duration, SystemTime};
 use xion_interpreter_proc_macros::native_function;
+
 #[native_function]
 fn print(values: Vec<Value>) {
     if values.len() == 1 {
@@ -29,6 +30,7 @@ fn input() -> String {
     }
     out.trim().to_string()
 }
+///calls to_string on input
 #[native_function]
 fn to_str(input: Value) -> String {
     input.to_string()
@@ -52,33 +54,16 @@ fn time() -> f64 {
 }
 /// returns 0 if slept
 ///
-/// returns 1 if type was invalid
-///
-/// returns 2 if int was negative
+/// returns 1 if time was negative
 ///
 /// sleeps for said amount of seconds
 #[native_function]
-fn sleep(input: Value) -> i64 {
-    match input {
-        Value::Number(i) => {
-            if i < 0 {
-                return 2;
-            }
-
-            std::thread::sleep(Duration::from_secs(i as u64));
-
-            0
-        }
-        Value::Float(f) => {
-            if f < 0.0 {
-                return 2;
-            }
-
-            std::thread::sleep(Duration::from_secs_f64(f));
-
-            0
-        }
-        _ => 1,
+fn sleep(time: f64) -> i64 {
+    if time < 0.0 {
+        1
+    } else {
+        std::thread::sleep(Duration::from_secs_f64(time));
+        0
     }
 }
 
@@ -112,7 +97,6 @@ mod lib {
         lib! {map,"lang"=>|scope|{
             scope.add_native_fn("print", PrintFn)?;
             scope.add_native_fn("str",ToStrFn)?;
-
 
 
 

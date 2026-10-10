@@ -61,7 +61,7 @@ fn test_variable_declaration_and_reference() {
     assert!(
         scope
             .with_var("y", |var_y| {
-                assert_eq!(*var_y.get_value(), Value::Number(100));
+                assert_eq!(*var_y.get_value(), Value::Int(100));
             })
             .is_some(),
         "var y should exist"
@@ -89,7 +89,7 @@ fn test_variable_reassignment() {
     assert!(
         scope
             .with_var("x", |var_x| {
-                assert_eq!(*var_x.get_value(), Value::Number(20));
+                assert_eq!(*var_x.get_value(), Value::Int(20));
             })
             .is_some(),
         "var x should exist"
@@ -128,7 +128,7 @@ fn test_math_operations() {
     assert!(
         scope
             .with_var("result", |var_x| {
-                assert_eq!(*var_x.get_value(), Value::Number(28));
+                assert_eq!(*var_x.get_value(), Value::Int(28));
             })
             .is_some(),
         "var result should exist"
@@ -144,7 +144,7 @@ fn test_return_statement() {
 
     let return_val = run!(nodes);
 
-    assert_eq!(return_val, Ok(Some(Value::Number(99))));
+    assert_eq!(return_val, Ok(Some(Value::Int(99))));
 }
 
 #[test]
@@ -168,7 +168,7 @@ fn test_array_literal_evaluation() {
             .with_var("arr", |arr_var| match &*arr_var.get_value() {
                 Value::Array(vec) => {
                     assert_eq!(vec.0.len(), 3);
-                    assert_eq!(vec.0[0], Value::Number(1));
+                    assert_eq!(vec.0[0], Value::Int(1));
                     assert_eq!(vec.0[1], Value::String("test".to_string()));
                     assert_eq!(vec.0[2], Value::Bool(true));
                 }
@@ -224,7 +224,7 @@ fn test_function_call() {
     assert!(
         scope
             .with_var("res", |var| {
-                assert_eq!(*var.get_value(), Value::Number(11));
+                assert_eq!(*var.get_value(), Value::Int(11));
             })
             .is_some(),
         "variable res should equal 11"
@@ -292,7 +292,7 @@ fn test_constructor_var_assigned_to_field() {
             .with_var("obj", |var| {
                 if let Value::Object(obj) = var.get_value() {
                     let field = obj.get_field("val").expect("field val should exist");
-                    assert_eq!(*field.get_value(), Value::Number(77));
+                    assert_eq!(*field.get_value(), Value::Int(77));
                 } else {
                     panic!("Expected Value::Object");
                 }
@@ -342,7 +342,7 @@ fn test_constructor_var_assigned_to_field_shared_name() {
             .with_var("cnt", |var| {
                 if let Value::Object(obj) = var.get_value() {
                     let field_x = obj.get_field("x").expect("field x should exist");
-                    assert_eq!(*field_x.get_value(), Value::Number(100));
+                    assert_eq!(*field_x.get_value(), Value::Int(100));
                 } else {
                     panic!("Expected Value::Object");
                 }
@@ -390,7 +390,7 @@ fn test_field_access() {
     assert!(
         scope
             .with_var("fetched_price", |var| {
-                assert_eq!(*var.get_value(), Value::Number(250));
+                assert_eq!(*var.get_value(), Value::Int(250));
             })
             .is_some(),
         "fetched_price should equal 250"
@@ -435,7 +435,7 @@ fn test_field_reassignment() {
                     let balance_field = obj
                         .get_field("balance")
                         .expect("balance field should exist");
-                    assert_eq!(*balance_field.get_value(), Value::Number(150));
+                    assert_eq!(*balance_field.get_value(), Value::Int(150));
                 } else {
                     panic!("Expected Value::Object");
                 }
@@ -581,7 +581,7 @@ fn test_class_static_var_access() {
         }))),
     ];
     let r = run!(nodes);
-    assert_eq!(Ok(Some(Value::Number(3))), r);
+    assert_eq!(Ok(Some(Value::Int(3))), r);
 }
 
 #[test]

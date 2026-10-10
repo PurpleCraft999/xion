@@ -1,0 +1,9 @@
+print("hello");
+print("hello","world");
+print(str(true));
+import io;
+#print(input());
+import time;
+print(time());
+print(sleep(1));
+print(sleep(1.3));

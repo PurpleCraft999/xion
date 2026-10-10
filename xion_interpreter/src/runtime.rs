@@ -90,7 +90,7 @@ impl Runtime {
                     Ok(None)
                 }
             }
-            NumberLiteral(num) => Ok(Some(Value::Number(num))),
+            NumberLiteral(num) => Ok(Some(Value::Int(num))),
             FloatLiteral(float) => Ok(Some(Value::Float(float))),
             FnCall {
                 name: func_name,
@@ -414,11 +414,11 @@ impl Runtime {
         })
     }
 }
-#[xion_interpreter_proc_macros::value_helper]
+#[xion_interpreter_proc_macros::value_helper(f64 => Value::Int(e) {Ok(e as f64)})]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     String(String),
-    Number(i64),
+    Int(i64),
     Bool(bool),
     Array(Array),
     Object(RuntimeClassInstance),
@@ -432,15 +432,15 @@ impl Value {
                 Value::String(right) => Ok(Value::String(left.to_string() + right)),
                 e => Err(MathError::InvalidTypeRight(e.value_type())),
             },
-            Value::Number(left) => match other {
+            Value::Int(left) => match other {
                 Value::Float(right) => Ok(Value::Float(*left as f64 + *right)),
-                Value::Number(right) => Ok(Value::Number(*left + *right)),
+                Value::Int(right) => Ok(Value::Int(*left + *right)),
                 Value::String(right) => Ok(Value::String(left.to_string() + right)),
                 e => Err(MathError::InvalidTypeRight(e.value_type())),
             },
             Value::String(left) => match other {
                 Value::Bool(right) => Ok(Value::String(left.to_owned() + &(right.to_string()))),
-                Value::Number(right) => Ok(Value::String(left.to_owned() + &(right.to_string()))),
+                Value::Int(right) => Ok(Value::String(left.to_owned() + &(right.to_string()))),
                 Value::String(right) => Ok(Value::String(left.to_owned() + right)),
                 Value::Array(right) => Ok(Value::String(left.to_owned() + &right.to_string())),
                 Value::Float(right) => Ok(Value::String(left.to_owned() + &right.to_string())),
@@ -452,7 +452,7 @@ impl Value {
             },
             Value::Float(left) => match other {
                 Value::Float(right) => Ok(Value::Float(*left + *right)),
-                Value::Number(right) => Ok(Value::Float(*left + *right as f64)),
+                Value::Int(right) => Ok(Value::Float(*left + *right as f64)),
                 Value::String(right) => Ok(Value::String(left.to_string() + right)),
                 e => Err(InvalidTypeRight(e.value_type())),
             },
@@ -461,14 +461,14 @@ impl Value {
     }
     fn sub(&self, other: &Value) -> Result<Value, MathError> {
         match self {
-            Value::Number(left) => match other {
+            Value::Int(left) => match other {
                 Value::Float(right) => Ok(Value::Float(*left as f64 - *right)),
-                Value::Number(right) => Ok(Value::Number(*left - *right)),
+                Value::Int(right) => Ok(Value::Int(*left - *right)),
                 e => Err(MathError::InvalidTypeRight(e.value_type())),
             },
             Value::Float(left) => match other {
                 Value::Float(right) => Ok(Value::Float(left - right)),
-                Value::Number(right) => Ok(Value::Float(left - *right as f64)),
+                Value::Int(right) => Ok(Value::Float(left - *right as f64)),
                 e => Err(MathError::InvalidTypeRight(e.value_type())),
             },
 
@@ -478,19 +478,19 @@ impl Value {
     }
     fn mul(&self, other: &Value) -> Result<Value, MathError> {
         match self {
-            Value::Number(left) => match other {
+            Value::Int(left) => match other {
                 Value::Float(right) => Ok(Value::Float(*left as f64 * *right)),
-                Value::Number(right) => Ok(Value::Number(*left * *right)),
+                Value::Int(right) => Ok(Value::Int(*left * *right)),
                 Value::String(right) => string_mult(right, *left).map(Value::String),
                 e => Err(MathError::InvalidTypeRight(e.value_type())),
             },
             Value::String(left) => match other {
-                Value::Number(right) => string_mult(left, *right).map(Value::String),
+                Value::Int(right) => string_mult(left, *right).map(Value::String),
                 e => Err(InvalidTypeRight(e.value_type())),
             },
             Value::Float(left) => match other {
                 Value::Float(right) => Ok(Value::Float(left * right)),
-                Value::Number(right) => Ok(Value::Float(*left * *right as f64)),
+                Value::Int(right) => Ok(Value::Float(*left * *right as f64)),
                 e => Err(MathError::InvalidTypeRight(e.value_type())),
             },
             Value::Object(_) => unimplemented!(),
@@ -499,21 +499,21 @@ impl Value {
     }
     fn div(&self, other: &Value) -> Result<Value, MathError> {
         match (self, other) {
-            (Value::Number(left), Value::Number(right)) => {
+            (Value::Int(left), Value::Int(right)) => {
                 if *right == 0 {
                     Err(MathError::DivisionByZero)
                 } else {
-                    Ok(Value::Number(left / right))
+                    Ok(Value::Int(left / right))
                 }
             }
-            (Value::Number(left), Value::Float(right)) => {
+            (Value::Int(left), Value::Float(right)) => {
                 if *right == 0.0 {
                     Err(MathError::DivisionByZero)
                 } else {
                     Ok(Value::Float(*left as f64 / right))
                 }
             }
-            (Value::Float(left), Value::Number(right)) => {
+            (Value::Float(left), Value::Int(right)) => {
                 if *right == 0 {
                     Err(MathError::DivisionByZero)
                 } else {
@@ -528,8 +528,8 @@ impl Value {
                 }
             }
 
-            (Value::Number(_), e) => Err(InvalidTypeRight(e.value_type())),
-            (e, Value::Number(_)) => Err(InvalidTypeLeft(e.value_type())),
+            (Value::Int(_), e) => Err(InvalidTypeRight(e.value_type())),
+            (e, Value::Int(_)) => Err(InvalidTypeLeft(e.value_type())),
             _ => unreachable!(
                 "number ocupies both slots in previous brances therefore this cannot be reached"
             ),
@@ -539,7 +539,7 @@ impl Value {
         match self {
             Self::Array(_) => ValueType::Array,
             Self::Bool(_) => ValueType::Bool,
-            Self::Number(_) => ValueType::Int,
+            Self::Int(_) => ValueType::Int,
             Self::Object(_) => ValueType::Object,
             Self::String(_) => ValueType::String,
             Self::Float(_) => ValueType::Float,
@@ -549,7 +549,7 @@ impl Value {
     fn to_bool(&self) -> Option<bool> {
         match self {
             Self::Bool(bool) => Some(*bool),
-            Self::Number(num) => Some(*num != 0),
+            Self::Int(num) => Some(*num != 0),
 
             _ => None,
         }
@@ -557,13 +557,14 @@ impl Value {
 }
 
 impl FromValue for Value {
-    fn from_value(value: Value) -> Option<Self>
+    fn from_value(value: Value) -> Result<Self, RuntimeError>
     where
         Self: Sized,
     {
-        Some(value)
+        Ok(value)
     }
 }
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Array(Vec<Value>);
 impl Display for Array {
@@ -573,7 +574,7 @@ impl Display for Array {
 }
 
 pub trait FromValue {
-    fn from_value(value: Value) -> Option<Self>
+    fn from_value(value: Value) -> Result<Self, RuntimeError>
     where
         Self: Sized;
 }
@@ -649,7 +650,7 @@ impl std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let string_value = match self {
             Self::Bool(b) => b.to_string(),
-            Self::Number(n) => n.to_string(),
+            Self::Int(n) => n.to_string(),
             Self::String(s) => s.to_owned(),
             Self::Array(v) => v.to_string(),
             Self::Object(o) => o.to_string(),
@@ -1035,7 +1036,7 @@ impl Display for RuntimeError {
             } => write!(
                 f,
                 "a value of type {:?} was expected but a value of {:?} was found instead",
-                actual_value, expected_value
+                expected_value, actual_value
             ),
             RuntimeError::TypeErrorMultiplePosibleValues {
                 actual_value,

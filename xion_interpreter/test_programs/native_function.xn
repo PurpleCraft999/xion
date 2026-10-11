@@ -1,10 +1,10 @@
 print("hello");
-print("hello","world");
+print("hello"," world\n");
 print(str(true));
+print(int(50.4));
 import io;
 #print(input());
 import time;
 print(time());
-print("no end","the end");
 #print(sleep(1));
 #print(sleep(1.3));

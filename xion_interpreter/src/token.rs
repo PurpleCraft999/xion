@@ -31,23 +31,30 @@ impl<'a> Lexer<'a> {
         }
         next
     }
-    ///consumes raw_tokens upto and including s
+    ///consumes raw_tokens upto but not including s
     fn consume_until(&mut self, s: char) -> String {
-        let mut next = String::new();
-        while let Some(c) = &self.file.next() {
+        let mut consumed = String::new();
+        while let Some(c) = self.file.peek() {
             let c = *c;
 
             if c == s {
                 break;
             }
-
-            next.push(c);
+            self.next();
+            consumed.push(c);
         }
         if self.file.peek().is_none() {
-            warn!("cannot find char \'{s:?}\'");
+            warn!(target:"lexer", "cannot find char {s:?}");
         }
 
-        next
+        consumed
+    }
+    fn consume_comment(&mut self) {
+        while let Some(c) = self.file.peek()
+            && *c != '\n'
+        {
+            self.next();
+        }
     }
 
     fn add_token(&mut self, token: Token) {
@@ -58,14 +65,18 @@ impl<'a> Lexer<'a> {
         while let Some(current) = self.next() {
             //comments
             if current == '#' {
-                self.consume_until('\n');
+                self.consume_comment();
                 continue;
             }
 
             //string literals
             if current == '"' {
                 let string_lit = self.consume_until('"');
-                self.add_token(Token::StringLiteral(string_lit));
+                //consume end "
+                self.next();
+                let string = escape(string_lit);
+
+                self.add_token(Token::StringLiteral(string));
                 continue;
             }
             if let Some(peek) = self.file.peek()
@@ -88,7 +99,7 @@ impl<'a> Lexer<'a> {
                 continue;
             }
 
-            warn!("unknown token {}", current_str);
+            warn!(target:"lexer", "unknown token {}", current_str);
         }
         self.add_token(Token::EOF);
 
@@ -99,6 +110,13 @@ impl<'a> Lexer<'a> {
 const fn is_whitespace(c: char) -> bool {
     c == ' ' || c == '\n' || c == '\t'
 }
+
+///turns unicode chars into the value
+fn escape(s: String) -> String {
+    //FixMe: \\n to be parsed as r"\n" and not \
+    s.replace(r"\n", "\n")
+}
+
 fn is_name(name: &str) -> bool {
     !name.starts_with(|c: char| c.is_numeric())
         && name.chars().all(|c| c.is_alphanumeric() || c == '_')

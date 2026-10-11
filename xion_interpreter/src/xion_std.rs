@@ -108,7 +108,7 @@ mod lib {
         lib! {map,"lang"=>|scope|{
             scope.add_native_fn("print", PrintFn)?;
             scope.add_native_fn("str",ToStrFn)?;
-            scope.add_native_fn("to_int",ToIntFn)?;
+            scope.add_native_fn("int",ToIntFn)?;
 
 
             Ok(())

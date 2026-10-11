@@ -100,3 +100,9 @@ fn parse_dual_tokens() {
     let lexed = lex("==");
     assert_eq!(vec![IsEq], lexed);
 }
+
+#[test]
+fn parse_escape_codes() {
+    let lexed = lex(r#""\n""#);
+    assert_eq!(vec![StringLiteral("\n".to_string())], lexed);
+}

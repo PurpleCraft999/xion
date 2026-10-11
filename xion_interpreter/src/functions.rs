@@ -37,6 +37,14 @@ impl NonNativeFunction {
     }
 
     fn call(&self, args: Vec<Value>, scope: Scope) -> crate::runtime::RuntimeReturn {
+        if args.len() != self.params.len() {
+            return Err(RuntimeError::FnCallArgLengthMixMatch {
+                function_name: self.name().to_string(),
+                expected: self.params.len(),
+                found: args.len(),
+            });
+        }
+
         let mut runtime = Runtime::with_scope_and_nodes(self.body.clone(), scope);
         for (name, value) in self.params.iter().zip(args) {
             let name = name.to_owned();
@@ -46,5 +54,18 @@ impl NonNativeFunction {
                 .expect("this is safe because these are the first vars made");
         }
         runtime.run().map(|v| v.as_value())
+    }
+}
+#[derive(Debug, Clone)]
+pub enum FunctionReturn {
+    Value(Value),
+    None,
+}
+impl FunctionReturn {
+    pub fn as_value(self) -> Option<Value> {
+        match self {
+            Self::Value(v) => Some(v),
+            Self::None => None,
+        }
     }
 }

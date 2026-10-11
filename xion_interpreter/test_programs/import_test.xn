@@ -1,6 +1,8 @@
 import name;
-import foo;
+#import foo;
 import io;
 
-
-print(Name(name:"goh"));
+print(int(43.9));
+#let p = Person();
+#p.changeId(Name(name:40));
+#print(p);

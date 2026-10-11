@@ -1,6 +1,17 @@
 class Name{
     let name="john";
-    
 
+
+}
+
+class Person{
+    let name=Name(name:"john");
+    let age = 4;
+
+
+    fn changeId(n,a){
+        name=n;
+        #age=a;
+    }
 
 }

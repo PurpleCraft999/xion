@@ -1,19 +1,139 @@
 use std::collections::HashMap;
 
 use proc_macro::TokenStream;
-use quote::quote;
+use quote::{ToTokens, format_ident, quote};
 use syn::{
-    Block, Expr, Fields, GenericArgument, ItemEnum, ItemFn, PathArguments, ReturnType, Token, Type,
+    Block, Expr, Fields, GenericArgument, Item, ItemEnum, ItemFn, ItemMod, LitStr, PathArguments,
+    ReturnType, Token, Type,
     parse::{Parse, ParseStream},
-    parse_macro_input,
+    parse_macro_input, parse_quote,
     punctuated::Punctuated,
 };
+
+#[proc_macro_attribute]
+pub fn lib(_attr: TokenStream, stream: TokenStream) -> TokenStream {
+    let mut stream = parse_macro_input!(stream as ItemMod);
+
+    let mut functions: Vec<(String, syn::Ident)> = Vec::new();
+
+    {
+        let (_, content) = stream.content.as_ref().expect("must have body");
+        for item in content {
+            match item {
+                Item::Fn(f) => {
+                    if let Some(a) = f
+                        .attrs
+                        .iter()
+                        .find(|a| a.path().is_ident("native_function"))
+                    {
+                        let actual_fn_name = f.sig.ident.clone();
+                        let fn_name = if let Ok(s) = a.parse_args::<LitStr>() {
+                            s.value()
+                        } else {
+                            actual_fn_name.clone().to_string()
+                        };
+                        functions.push((fn_name, actual_fn_name));
+                    }
+                }
+                Item::Struct(s)
+                    if let Some(_a) =
+                        s.attrs.iter().find(|a| a.path().is_ident("native_class")) => {}
+                _ => (), // let s = format!("{:?}",f.attrs.clone().into_iter().map(|a|a.meta.into_token_stream().to_string()).collect::<Vec<_>>());
+                         // return quote!{compile_error!(#s);}.into();
+            }
+
+            // if let Item::Struct(st) = item{
+
+            // }
+        }
+    }
+    {
+        let (_, content) = stream.content.as_mut().expect("must have body");
+        let functions: Vec<_> = functions
+            .into_iter()
+            .map(|(n, id)| {
+                (n, {
+                    format_ident!("{}Fn", make_pascal_case_from_snake(id.to_string()))
+                })
+            })
+            .collect();
+        let functions = functions.iter().map(|(a, b)| {
+            quote! { (#a.to_string(), Arc::new(#b) as Arc<dyn NativeFunction>) }
+        });
+
+        let get_fn = quote! {
+            pub fn get_std_lib_fn()->Vec<(String,Arc<dyn NativeFunction>)>{
+                Vec::from([#(#functions),*])
+            }
+        };
+        let func: ItemFn = match syn::parse2(get_fn) {
+            Ok(s) => s,
+            Err(e) => return e.to_compile_error().into(),
+        };
+
+        content.push(Item::Use(parse_quote!(
+            use std::sync::Arc;
+        )));
+        content.push(Item::Use(parse_quote!(
+            use crate::{
+                functions::NativeFunction,
+                runtime::{FromValue, RuntimeError},
+                Value,
+            };
+        )));
+        content.push(Item::Use(parse_quote!(
+            use xion_interpreter_proc_macros::native_function;
+        )));
+
+        content.push(Item::Fn(func));
+    }
+
+    quote! {#stream}.into()
+}
+
+struct NativeFunctionAttr {
+    // library_name:LitStr,
+    function_name: Option<LitStr>,
+}
+impl Parse for NativeFunctionAttr {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        // let lib_name = input.parse()?;
+        let func_name = if !input.is_empty() {
+            Some(input.parse()?)
+        } else {
+            None
+        };
+
+        // let func_name = if input.peek(Token![,]) {
+        //     let _: Token![,] = input.parse().expect("");
+
+        //     if input.peek(LitStr) {
+        //         Some(input.parse()?)
+        //     } else {
+        //         return Err(input.error("expected a string literal after comma"));
+        //     }
+        // } else {
+        //     None
+        // };
+
+        Ok(Self {
+            // library_name:lib_name,
+            function_name: func_name,
+        })
+    }
+}
+
 //ai
 #[proc_macro_attribute]
-pub fn native_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn native_function(attr: TokenStream, item: TokenStream) -> TokenStream {
     let input_fn = parse_macro_input!(item as ItemFn);
     let fn_name = &input_fn.sig.ident;
-
+    let attr = parse_macro_input!(attr as NativeFunctionAttr);
+    let fn_name_str = if let Some(name) = attr.function_name {
+        quote! {#name}
+    } else {
+        quote! {#fn_name}.to_string().to_token_stream()
+    };
     // Generate a unique struct name, e.g., `add` -> `AddFn`
     let struct_name_str: String = format!("{}Fn", make_pascal_case_from_snake(fn_name.to_string()));
     let struct_name = syn::Ident::new(&struct_name_str, fn_name.span());
@@ -107,7 +227,7 @@ pub fn native_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
     } else {
         quote! {
             if args.len() < #min_args || args.len()>#max_args {
-                return Err(RuntimeError::FnCallArgLengthMixMatch { expected: #num_args, found: args.len() });
+                return Err(RuntimeError::FnCallArgLengthMixMatch {function_name:#fn_name_str.to_string() ,expected: #num_args, found: args.len() });
             }
         }
     };
@@ -144,6 +264,9 @@ pub fn native_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
         // Generate the invoker struct
         #[derive(Debug)]
         pub struct #struct_name;
+        // impl #struct_name{
+        //     const Name:&str = #fn_name_str;
+        // }
 
         impl NativeFunction for #struct_name {
             fn call(&self, args: Vec<Value>) -> Result<Option<Value>, RuntimeError> {

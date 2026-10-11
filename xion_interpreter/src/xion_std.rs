@@ -1,102 +1,117 @@
-use crate::Value;
-use crate::functions::NativeFunction;
-use crate::runtime::FromValue;
-use crate::runtime::RuntimeError;
-use std::time::{Duration, SystemTime};
-use xion_interpreter_proc_macros::native_function;
+use xion_interpreter_proc_macros::lib;
 
-#[native_function]
-fn print(value: Value, mut end: Option<String>) {
-    print!("{value}{}", end.get_or_insert("\n".to_string()))
+#[lib]
+mod lang {
+    // use super::*;
+    #[native_function]
+    fn print(value: Value, mut end: Option<String>) {
+        // s();
+        print!("{value}{}", end.get_or_insert("\n".to_string()))
 
-    // if values.len() == 1 {
-    //     println!("{}", values[0])
-    // } else if values.is_empty() {
-    //     println!();
-    // } else {
-    //     for (i, value) in values.iter().enumerate() {
-    //         print!("{value}");
-    //         if i < values.len() - 1 {
-    //             print!(",")
-    //         }
-    //     }
-    //     println!()
-    // }
-}
-#[native_function]
-fn input() -> String {
-    let mut out = String::new();
-    match std::io::stdin().read_line(&mut out) {
-        Ok(_) => (),
-        Err(err) => println!("Error reading input steam {err}"),
+        // if values.len() == 1 {
+        //     println!("{}", values[0])
+        // } else if values.is_empty() {
+        //     println!();
+        // } else {
+        //     for (i, value) in values.iter().enumerate() {
+        //         print!("{value}");
+        //         if i < values.len() - 1 {
+        //             print!(",")
+        //         }
+        //     }
+        //     println!()
+        // }
     }
-    out.trim().to_string()
+    ///calls to_string on input
+    #[native_function("str")]
+    fn to_str(input: Value) -> String {
+        input.to_string()
+    }
+    #[native_function("int")]
+    fn to_int(input: Value) -> Option<i64> {
+        Some(match input {
+            Value::Bool(b) => b as i64,
+            Value::Int(i) => i,
+            Value::Float(f) => f.round() as i64,
+            _ => return None,
+        })
+    }
 }
-///calls to_string on input
-#[native_function]
-fn to_str(input: Value) -> String {
-    input.to_string()
-}
-#[native_function]
-fn to_int(input: Value) -> Option<i64> {
-    Some(match input {
-        Value::Bool(b) => b as i64,
-        Value::Int(i) => i,
-        Value::Float(f) => f.round() as i64,
-        _ => return None,
-    })
+#[lib]
+mod io {
+
+    #[native_function]
+    fn input() -> String {
+        let mut out = String::new();
+        match std::io::stdin().read_line(&mut out) {
+            Ok(_) => (),
+            Err(err) => println!("Error reading input steam {err}"),
+        }
+        out.trim().to_string()
+    }
 }
 
-///returns -1.0 if system time is before unix_epoch
-/// returns current time in seconds otherwise
-#[native_function]
-fn time() -> f64 {
-    match std::time::SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
-        Ok(t) => t.as_secs_f64(),
-        Err(s) => {
-            error!(
-                "system time is behind the unix epoch by {} seconds",
-                s.duration().as_secs()
-            );
+#[lib]
+mod time {
+    use std::time::{Duration, SystemTime};
+    ///returns -1.0 if system time is before unix_epoch
+    /// returns current time in seconds otherwise
+    #[native_function]
+    fn time() -> f64 {
+        match std::time::SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
+            Ok(t) => t.as_secs_f64(),
+            Err(s) => {
+                log::error!(
+                    "system time is behind the unix epoch by {} seconds",
+                    s.duration().as_secs()
+                );
 
-            -1f64
+                -1f64
+            }
+        }
+    }
+    /// returns 0 if slept
+    ///
+    /// returns 1 if time was negative
+    ///
+    /// sleeps for said amount of seconds
+    #[native_function]
+    fn sleep(time: f64) -> i64 {
+        if time < 0.0 {
+            1
+        } else {
+            std::thread::sleep(Duration::from_secs_f64(time));
+            0
         }
     }
 }
-/// returns 0 if slept
-///
-/// returns 1 if time was negative
-///
-/// sleeps for said amount of seconds
-#[native_function]
-fn sleep(time: f64) -> i64 {
-    if time < 0.0 {
-        1
-    } else {
-        std::thread::sleep(Duration::from_secs_f64(time));
-        0
-    }
-}
 
-pub use lib::get_std_lib;
-use log::error;
+pub use stdlib::get_std_lib;
 
-mod lib {
+mod stdlib {
     use super::*;
-    use crate::runtime::RuntimeError;
+
     use crate::runtime::Scope;
     use std::{collections::HashMap, sync::OnceLock};
     static DEFAULT_LIBS: OnceLock<HashMap<String, Scope>> = OnceLock::new();
 
     macro_rules! lib {
-        ($map:expr, $($name:expr=>$block:expr),+ $(,)?) => {
+        ($map:expr, $($name:expr=>$mod_name:ident),+ $(,)?) => {
             $(
+                {
                 let mut scope = crate::runtime::Scope::new(String::from("std"));
                 // $block(&mut scope).expect("no names are the same in the same module");
-                let block:fn(&mut Scope)-> Result<(), RuntimeError> = $block;
-                block(&mut scope).expect("all names are unique");
-                $map.insert($name.to_string(),scope);
+                // let block:fn(&mut Scope)-> Result<(), RuntimeError> = $block;
+                // block(&mut scope).expect("all names are unique");
 
+                for (name,st) in $mod_name::get_std_lib_fn(){
+                    scope.add_native_function(&name,st).expect("name is unique");
+                }
+
+
+
+                $map.insert($name.to_string(),scope);
+                }
 
             )+
         };
@@ -104,30 +119,17 @@ mod lib {
 
     fn build_default_libs() -> HashMap<String, crate::runtime::Scope> {
         let mut map = HashMap::new();
-
-        lib! {map,"lang"=>|scope|{
-            scope.add_native_fn("print", PrintFn)?;
-            scope.add_native_fn("str",ToStrFn)?;
-            scope.add_native_fn("int",ToIntFn)?;
-
-
-            Ok(())
-            },
-            "io"=>|scope|{
-
-
-                scope.add_native_fn("input", InputFn)?;
-
-                Ok(())
-            },
-            "time"=>|scope|{
-                scope.add_native_fn("time", TimeFn)?;
-                scope.add_native_fn("sleep",SleepFn)?;
-                Ok(())
-            }
-        }
+        lib! {map,
+            "lang"=>lang,
+            "io"=>io,
+            "time"=>time,
+        };
         map
     }
+
+    // pub fn add_fn_to_std_lib<F:NativeFunction>(std_fn_name:&str,func:F){
+
+    // }
 
     fn get_libs() -> &'static HashMap<String, Scope> {
         DEFAULT_LIBS.get_or_init(build_default_libs)

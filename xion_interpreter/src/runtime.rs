@@ -8,7 +8,7 @@ use log::{debug, error};
 use crate::ast::{MathSign, Node};
 use crate::ast::{Node::*, VariableAttributes};
 use crate::class::{ClassDefinitionError, ClassPath, RuntimeClass, RuntimeClassInstance};
-use crate::functions::{Function, NativeFunction, NonNativeFunction};
+use crate::functions::{Function, FunctionReturn, NativeFunction, NonNativeFunction};
 use crate::runtime::MathError::{InvalidTypeLeft, InvalidTypeRight};
 use crate::runtime::RuntimeError::{DoesNotExist, Other};
 use crate::{parse_and_lex_file, xion_std};
@@ -581,19 +581,6 @@ pub trait FromValue {
     where
         Self: Sized;
 }
-#[derive(Debug, Clone)]
-pub enum FunctionReturn {
-    Value(Value),
-    None,
-}
-impl FunctionReturn {
-    pub fn as_value(self) -> Option<Value> {
-        match self {
-            Self::Value(v) => Some(v),
-            Self::None => None,
-        }
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ValueType {
@@ -726,14 +713,14 @@ impl Scope {
             static_variables: HashMap::new(),
         }
     }
-    pub fn add_native_fn(
-        &mut self,
-        name: &str,
-        func: impl NativeFunction + 'static,
-    ) -> Result<(), RuntimeError> {
-        self.copy_native_function(name, Arc::new(func))
-    }
-    fn copy_native_function(
+    // pub fn add_native_fn(
+    //     &mut self,
+    //     name: &str,
+    //     func: impl NativeFunction + 'static,
+    // ) -> Result<(), RuntimeError> {
+    //     self.copy_native_function(name, Arc::new(func))
+    // }
+    pub fn add_native_function(
         &mut self,
         name: &str,
         func: Arc<dyn NativeFunction>,
@@ -897,7 +884,7 @@ impl Scope {
         for (name, func) in other.functions {
             match func {
                 Function::NonNative(f) => self.add_func(f),
-                Function::Native(f) => self.copy_native_function(&name, f),
+                Function::Native(f) => self.add_native_function(&name, f),
             }?
         }
         for (name, var) in other.variables {
@@ -1020,6 +1007,7 @@ pub enum RuntimeError {
     },
     ClassDefinitionError(ClassDefinitionError),
     FnCallArgLengthMixMatch {
+        function_name: String,
         expected: usize,
         found: usize,
     },
@@ -1053,9 +1041,13 @@ impl Display for RuntimeError {
                 vec_to_string(expected_values)
             ),
             RuntimeError::ClassDefinitionError(e) => write!(f, "{e}"),
-            RuntimeError::FnCallArgLengthMixMatch { expected, found } => write!(
+            RuntimeError::FnCallArgLengthMixMatch {
+                function_name,
+                expected,
+                found,
+            } => write!(
                 f,
-                "when calling function _ found {found} number of args but expected {expected} number of args"
+                "when calling function {function_name} found {found} number of args but expected {expected} number of args"
             ),
         }
     }

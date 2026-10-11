@@ -135,6 +135,7 @@ pub enum Token {
     Import,
     If,
     IsEq,
+    Null,
 }
 
 impl Token {
@@ -149,6 +150,7 @@ impl Token {
             "import" => Import,
             "if" => If,
             "static" => Static,
+            "null" => Null,
             number if let Ok(num) = number.parse::<i64>() => NumberLiteral(num),
             name if is_name(name) => Name(name.to_string()),
 

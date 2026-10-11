@@ -6,20 +6,22 @@ use std::time::{Duration, SystemTime};
 use xion_interpreter_proc_macros::native_function;
 
 #[native_function]
-fn print(values: Vec<Value>) {
-    if values.len() == 1 {
-        println!("{}", values[0])
-    } else if values.is_empty() {
-        println!();
-    } else {
-        for (i, value) in values.iter().enumerate() {
-            print!("{value}");
-            if i < values.len() - 1 {
-                print!(",")
-            }
-        }
-        println!()
-    }
+fn print(value: Value, mut end: Option<String>) {
+    print!("{value}{}", end.get_or_insert("\n".to_string()))
+
+    // if values.len() == 1 {
+    //     println!("{}", values[0])
+    // } else if values.is_empty() {
+    //     println!();
+    // } else {
+    //     for (i, value) in values.iter().enumerate() {
+    //         print!("{value}");
+    //         if i < values.len() - 1 {
+    //             print!(",")
+    //         }
+    //     }
+    //     println!()
+    // }
 }
 #[native_function]
 fn input() -> String {
@@ -34,6 +36,15 @@ fn input() -> String {
 #[native_function]
 fn to_str(input: Value) -> String {
     input.to_string()
+}
+#[native_function]
+fn to_int(input: Value) -> Option<i64> {
+    Some(match input {
+        Value::Bool(b) => b as i64,
+        Value::Int(i) => i,
+        Value::Float(f) => f.round() as i64,
+        _ => return None,
+    })
 }
 
 ///returns -1.0 if system time is before unix_epoch
@@ -97,7 +108,7 @@ mod lib {
         lib! {map,"lang"=>|scope|{
             scope.add_native_fn("print", PrintFn)?;
             scope.add_native_fn("str",ToStrFn)?;
-
+            scope.add_native_fn("to_int",ToIntFn)?;
 
 
             Ok(())

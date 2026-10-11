@@ -103,7 +103,7 @@ impl AstBuilder {
             Fn => self.parse_function(),
             LeftBrace | RightBrace | RightParen | SemiColon | Comma | Colon | WhiteSpace
             | Equals | EOF | Class | Plus | Asterisk | RightBracket | Division | Dot | IsEq
-            | Static => {
+            | Static | Null => {
                 error!("unexpected token while parsing expresion: {:?}", token);
                 Err(AstError::UnexpectedToken)
             }
@@ -384,6 +384,7 @@ pub enum Node {
         right: Box<Node>,
     },
     FloatLiteral(f64),
+    Null,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 #[non_exhaustive]
@@ -449,6 +450,7 @@ mod pratt_parser {
 
                 return Err(AstError::UnexpectedToken);
             }
+            Token::Null => Node::Null,
             Token::NumberLiteral(num) => {
                 if let Some(&Token::Dot) = lexer.peek() {
                     lexer.next();

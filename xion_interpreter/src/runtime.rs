@@ -92,6 +92,7 @@ impl Runtime {
             }
             NumberLiteral(num) => Ok(Some(Value::Int(num))),
             FloatLiteral(float) => Ok(Some(Value::Float(float))),
+            Null => Ok(Some(Value::Null)),
             FnCall {
                 name: func_name,
                 arguments,
@@ -424,6 +425,7 @@ pub enum Value {
     Object(RuntimeClassInstance),
     Float(f64),
     Class(Arc<RuntimeClass>),
+    Null,
 }
 impl Value {
     fn add(&self, other: &Value) -> Result<Value, MathError> {
@@ -544,6 +546,7 @@ impl Value {
             Self::String(_) => ValueType::String,
             Self::Float(_) => ValueType::Float,
             Self::Class(_) => ValueType::Class,
+            Self::Null => ValueType::Null,
         }
     }
     fn to_bool(&self) -> Option<bool> {
@@ -601,6 +604,7 @@ pub enum ValueType {
     String,
     Float,
     Class,
+    Null,
 }
 impl Display for ValueType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -615,6 +619,7 @@ impl Display for ValueType {
                 Self::Float => "float",
                 Self::Object => "object",
                 Self::String => "string",
+                Self::Null => "null",
             }
         )
     }
@@ -656,6 +661,7 @@ impl std::fmt::Display for Value {
             Self::Object(o) => o.to_string(),
             Self::Float(f) => f.to_string(),
             Self::Class(c) => format!("{c:?}"),
+            Self::Null => "null".to_string(),
         };
         write!(f, "{string_value}")
     }

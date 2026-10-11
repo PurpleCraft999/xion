@@ -21,6 +21,8 @@ pub fn native_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut arg_extractions = Vec::new();
     let mut arg_names = Vec::new();
     let mut skip_length_check = false;
+    let mut min_args = 0usize;
+    let mut max_args = 0usize;
 
     let get_inner_type_from = |ty: &Type, name: &str| -> Option<Type> {
         if let Type::Path(type_path) = ty
@@ -67,12 +69,32 @@ pub fn native_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 if let syn::Pat::Ident(pat_ident) = &*pat_type.pat {
                     let ident = &pat_ident.ident;
                     arg_names.push(ident);
+                    max_args += 1;
 
-                    arg_extractions.push(quote! {
-                        let #ident = <#ty>::from_value(
-                            args.get(#i).ok_or(RuntimeError::Other(format!("Missing argument at index {}", #i)))?.clone()
-                        )?;
-                    });
+                    if let Some(inner_ty) = get_inner_type_from(ty, "Option") {
+                        // Optional argument: defaults to None if omitted or null
+                        arg_extractions.push(quote! {
+                            let #ident = match args.get(#i) {
+                                Some(val) if !matches!(val, Value::Null) => {
+                                    Some(<#inner_ty>::from_value(val.clone())?)
+                                }
+                                _ => None,
+                            };
+                        });
+                    } else {
+                        // Required argument
+                        min_args += 1;
+                        arg_extractions.push(quote! {
+                            let #ident = <#ty>::from_value(
+                                args.get(#i).ok_or(RuntimeError::Other(format!("Missing argument at index {}", #i)))?.clone()
+                            )?;
+                        });
+                    }
+                    // arg_extractions.push(quote! {
+                    //     let #ident = <#ty>::from_value(
+                    //         args.get(#i).ok_or(RuntimeError::Other(format!("Missing argument at index {}", #i)))?.clone()
+                    //     )?;
+                    // });
                 }
             }
         }
@@ -84,7 +106,7 @@ pub fn native_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
         quote! {}
     } else {
         quote! {
-            if args.len() != #num_args {
+            if args.len() < #min_args || args.len()>#max_args {
                 return Err(RuntimeError::FnCallArgLengthMixMatch { expected: #num_args, found: args.len() });
             }
         }
@@ -95,6 +117,15 @@ pub fn native_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
             quote! {
                 #fn_name(#(#arg_names),*);
                 Ok(None)
+            }
+        }
+        ReturnType::Type(_, ty) if let Some(_) = get_inner_type_from(ty, "Option") => {
+            quote! {
+                let res = #fn_name(#(#arg_names),*);
+                match res {
+                    Some(val) => Ok(Some(Value::from(val))),
+                    None => Ok(Some(Value::Null)),
+                }
             }
         }
 
@@ -235,6 +266,26 @@ pub fn value_helper(attr: TokenStream, item: TokenStream) -> TokenStream {
                         match value {
                             #enum_name::#variant_ident(val) => Ok(val),
                             #custom_arm
+                            _ => Err(RuntimeError::TypeError{actual_value:value.value_type(),expected_value:ValueType::#variant_ident}),
+                        }
+                    }
+                }
+                impl From<Option<#ty>> for #enum_name{
+                    fn from(val:Option<#ty>) ->Self{
+                        match val{
+                            Some(val)=>#enum_name::#variant_ident(val),
+                            None=>#enum_name::Null,
+                        }
+                    }
+                }
+                impl FromValue for Option<#ty> {
+                    fn from_value(value: #enum_name) -> Result<Self,RuntimeError>
+                    where
+                        Self: Sized
+                    {
+                        match value {
+                            #enum_name::#variant_ident(val) => Ok(Some(val)),
+                            // #custom_arm
                             _ => Err(RuntimeError::TypeError{actual_value:value.value_type(),expected_value:ValueType::#variant_ident}),
                         }
                     }

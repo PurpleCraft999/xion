@@ -1,3 +1,4 @@
+use crate::ast::VariableAttributes;
 use crate::runtime::ParentScope;
 use crate::{
     Value,
@@ -228,18 +229,59 @@ impl Class {
             Self::Runtime(r) => r.name(),
         }
     }
+    pub fn get_static_field(&self, name: &str) -> Option<Variable> {
+        match self {
+            Self::Native(n) => n.get_static_field(name),
+            Self::Runtime(r) => r.static_fields.get(name).cloned(),
+        }
+    }
+    pub fn instantiate(
+        &self,
+        args: Vec<crate::ast::Node>,
+        scope: Scope,
+    ) -> Result<ClassInstance, RuntimeError> {
+        match self {
+            Self::Runtime(r) => r
+                .instantiate(args, scope)
+                .map(|r| ClassInstance::Runtime(Arc::new(Mutex::new(r)))),
+            Self::Native(n) => n.instantiate(Vec::new()).map(ClassInstance::Native),
+        }
+    }
+}
+pub enum ClassInstance {
+    Runtime(Arc<Mutex<RuntimeClassInstance>>),
+    Native(Arc<Mutex<dyn NativeClassInstance>>),
+}
+
+#[derive(Debug)]
+pub struct Static<T: Into<Value> + Debug + Clone>(T);
+impl<T: Into<Value> + Debug + Clone> Static<T> {
+    pub fn new(value: T) -> Self {
+        Self(value)
+    }
+    pub fn value(&self) -> &T {
+        &self.0
+    }
+    // pub fn to_value(&self)->Value{
+    //     self.0.clone().into()
+    // }
+    pub fn to_variable(&self) -> Variable {
+        Variable::with_attributes(self.0.clone().into(), VariableAttributes::attr_static())
+    }
 }
 
 pub trait NativeClassInstance {}
 
 pub trait NativeClass: Debug + Send + Sync {
-    fn instantiate(&self, values: Vec<Value>)
-    -> Result<Arc<dyn NativeClassInstance>, RuntimeError>;
+    fn instantiate(
+        &self,
+        values: Vec<Value>,
+    ) -> Result<Arc<Mutex<dyn NativeClassInstance>>, RuntimeError>;
     fn name(&self) -> &str;
+    fn get_static_field(&self, name: &str) -> Option<Variable>;
 }
 impl PartialEq for dyn NativeClass {
-    fn eq(&self, _other: &Self) -> bool {
-        log::info!("fix native class eq");
-        true
+    fn eq(&self, other: &Self) -> bool {
+        self.name() == other.name()
     }
 }

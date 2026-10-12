@@ -67,8 +67,8 @@ pub fn lib(_attr: TokenStream, stream: TokenStream) -> TokenStream {
     content.push(Item::Use(parse_quote!(
         use crate::{
             functions::NativeFunction,
-            class::{NativeClass, NativeClassInstance},
-            runtime::{FromValue, RuntimeError},
+            class::{NativeClass, NativeClassInstance, Static},
+            runtime::{FromValue, RuntimeError, Variable},
             Value,
         };
     )));
@@ -148,6 +148,20 @@ impl Parse for NativeFunctionAttr {
         })
     }
 }
+
+fn get_inner_type(ty: &Type, name: &str) -> Option<Type> {
+    if let Type::Path(type_path) = ty
+        && let Some(segment) = type_path.path.segments.last()
+        && segment.ident == name
+        && let PathArguments::AngleBracketed(args) = &segment.arguments
+        && let Some(GenericArgument::Type(inner_ty)) = args.args.first()
+    {
+        return Some(inner_ty.clone());
+    }
+
+    None
+}
+
 //ai
 #[proc_macro_attribute]
 pub fn native_function(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -169,18 +183,7 @@ pub fn native_function(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut min_args = 0usize;
     let mut max_args = 0usize;
 
-    let get_inner_type_from = |ty: &Type, name: &str| -> Option<Type> {
-        if let Type::Path(type_path) = ty
-            && let Some(segment) = type_path.path.segments.last()
-            && segment.ident == name
-            && let PathArguments::AngleBracketed(args) = &segment.arguments
-            && let Some(GenericArgument::Type(inner_ty)) = args.args.first()
-        {
-            return Some(inner_ty.clone());
-        }
-
-        None
-    };
+    let get_inner_type_from = get_inner_type;
 
     // Check if there is exactly 1 parameter and it is a `Vec<T>`
     if input_fn.sig.inputs.len() == 1
@@ -330,13 +333,18 @@ pub fn native_class(stream: TokenStream) -> TokenStream {
     let class_name = class.ident.clone();
     let class_name_str = class_name.to_string();
     let mut fields = Vec::new();
+    let mut static_fields = Vec::new();
     for field in class.fields.iter() {
         if let Some(id) = &field.ident
             && let Some(at) = field.attrs.iter().find(|a| a.path().is_ident("value"))
             && let Ok(meta) = at.meta.require_name_value()
         {
             let value = meta.value.clone();
-            fields.push((id.clone(), field.ty.clone(), value));
+            if let Some(ty) = get_inner_type(&field.ty, "Static") {
+                static_fields.push((id.clone(), ty, value));
+            } else {
+                fields.push((id.clone(), field.ty.clone(), value));
+            }
         }
     }
     let obj_struct_name = format_ident!("{class_name}Instance");
@@ -351,19 +359,34 @@ pub fn native_class(stream: TokenStream) -> TokenStream {
         .collect::<Vec<_>>();
     let obj_struct: ItemStruct = parse_quote!(
         pub struct #obj_struct_name{
+            #[allow(unused)]
             #(#obj_fields),*
-
-
-
         }
-
-
-
     );
 
     let default_field_values = fields
         .iter()
         .map(|(name, _, value)| quote! {let #name = #value.to_owned(); })
+        .collect::<Vec<_>>();
+    let static_class_fields = static_fields
+        .iter()
+        .map(|(name, _, expr)| {
+            quote! {#name:Static::new(#expr)}
+        })
+        .collect::<Vec<_>>();
+
+    let static_fields_match = static_fields
+        .iter()
+        .map(|(name, _ty, _expr)| {
+            let name_str = name.to_string();
+
+            quote! {#name_str=>Some(self.#name.to_variable())}
+        })
+        .collect::<Vec<_>>();
+
+    let obj_create_field_values = fields
+        .iter()
+        .map(|(name, _, _)| quote! {let #name = self.#name.to_owned();})
         .collect::<Vec<_>>();
 
     quote! {
@@ -374,8 +397,8 @@ pub fn native_class(stream: TokenStream) -> TokenStream {
                 #(#default_field_values)*
                 Self{
 
-                    #(#obj_fields_name),*
-
+                    #(#obj_fields_name),*,
+                    #(#static_class_fields),*
                 }
             }
         }
@@ -385,13 +408,13 @@ pub fn native_class(stream: TokenStream) -> TokenStream {
         impl NativeClassInstance for #obj_struct_name{}
 
         impl NativeClass for #class_name{
-            fn instantiate(&self,values:Vec<Value>)->Result<Arc<dyn NativeClassInstance>,RuntimeError>{
+            fn instantiate(&self,values:Vec<Value>)->Result<Arc<std::sync::Mutex<dyn NativeClassInstance>>,RuntimeError>{
 
 
-                #(#default_field_values)*
+                #(#obj_create_field_values)*
 
 
-                Ok(Arc::new(#obj_struct_name{#(#obj_fields_name),* }) as Arc<dyn NativeClassInstance>)
+                Ok(Arc::new(std::sync::Mutex::new(#obj_struct_name{#(#obj_fields_name),* })) as Arc<std::sync::Mutex<dyn NativeClassInstance>>)
 
 
 
@@ -399,6 +422,13 @@ pub fn native_class(stream: TokenStream) -> TokenStream {
             }
             fn name(&self)->&str{
                 Self::Name
+            }
+            fn get_static_field(&self,name:&str)->Option<Variable>{
+                match name{
+
+                    #(#static_fields_match),*,
+                    _=>None
+                }
             }
 
         }

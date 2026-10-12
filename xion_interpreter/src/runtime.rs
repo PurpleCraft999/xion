@@ -194,17 +194,13 @@ impl Runtime {
                                     obj.class().name()
                                 ))),
                             //static variables
-                            Value::Class(class) => match class {
-                                Class::Runtime(class) => class
-                                    .static_fields
-                                    .get(&field_name)
-                                    .map(|s| s.get_value().clone())
-                                    .ok_or(RuntimeError::DoesNotExist(format!(
-                                        "static field {field_name} in class {}",
-                                        class.name()
-                                    ))),
-                                Class::Native(_) => unimplemented!(),
-                            },
+                            Value::Class(class) => class
+                                .get_static_field(&field_name)
+                                .map(|s| s.to_value())
+                                .ok_or(RuntimeError::DoesNotExist(format!(
+                                    "static field {field_name} in class {}",
+                                    class.name()
+                                ))),
 
                             v => Err(RuntimeError::TypeErrorMultiplePosibleValues {
                                 actual_value: v.value_type(),
@@ -961,6 +957,9 @@ impl Variable {
 
     pub fn get_value(&self) -> &Value {
         &self.value
+    }
+    pub fn to_value(self) -> Value {
+        self.value
     }
     pub fn get_value_mut(&mut self) -> &mut Value {
         &mut self.value

@@ -2,6 +2,7 @@ use xion_interpreter_proc_macros::lib;
 
 #[lib]
 mod lang {
+
     // use super::*;
     #[native_function]
     fn print(value: Value, mut end: Option<String>) {
@@ -36,13 +37,13 @@ mod lang {
             _ => return None,
         })
     }
-
-    // #[derive(Debug, NativeClass)]
-    // struct Test {
-    //     // #[value = "testing"]
-    //     // #[allow(unused)]
-    //     // name: String,
-    // }
+    #[derive(Debug, NativeClass)]
+    struct Test {
+        #[value = "testing"]
+        name: String,
+        #[value = 4]
+        id: Static<i64>,
+    }
 }
 #[lib]
 mod io {

@@ -36,6 +36,13 @@ mod lang {
             _ => return None,
         })
     }
+
+    // #[derive(Debug, NativeClass)]
+    // struct Test {
+    //     // #[value = "testing"]
+    //     // #[allow(unused)]
+    //     // name: String,
+    // }
 }
 #[lib]
 mod io {
@@ -104,9 +111,13 @@ mod stdlib {
                 // let block:fn(&mut Scope)-> Result<(), RuntimeError> = $block;
                 // block(&mut scope).expect("all names are unique");
 
-                for (name,st) in $mod_name::get_std_lib_fn(){
-                    scope.add_native_function(&name,st).expect("name is unique");
+                for (name,func) in $mod_name::get_std_lib_fn(){
+                    scope.add_native_function(&name,func).expect("function name is unique");
                 }
+                for class in $mod_name::get_std_lib_classes(){
+                    scope.add_class(crate::class::Class::Native(class)).expect("class names are unique");
+                }
+
 
 
 

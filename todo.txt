@@ -5,9 +5,10 @@ add module testing
 consider merging two arrays with +
 while loops
 for loops
-better functions
 conversion functions for types
-add std objects
+
+native class methods,constructor, and fields
+
 
 function call into method_call. eg return_string().len();
 static methods

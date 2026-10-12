@@ -5,7 +5,7 @@ use crate::{
     runtime::{RuntimeError, RuntimeReturn, Scope, Variable},
 };
 use std::collections::{HashMap, HashSet};
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::sync::{Arc, Mutex};
 
@@ -42,11 +42,55 @@ impl RuntimeClass {
         self.class_path.name()
     }
 
-    pub fn instantiate(self: &Arc<Self>) -> RuntimeClassInstance {
-        RuntimeClassInstance {
+    pub fn instantiate(
+        self: &Arc<Self>,
+        arguments: Vec<crate::ast::Node>,
+        mut scope: Scope,
+    ) -> Result<RuntimeClassInstance, RuntimeError> {
+        let mut instance = RuntimeClassInstance {
             class: Arc::clone(self),
             fields: self.fields.clone(),
+        };
+
+        //allows for Class(a:a);
+        const INJECTED_VAR_NAME: &str = "@from_constructor";
+        log::debug!("instantiating class {self:?}");
+        // let mut instance = class.instantiate();
+
+        //adds INJECTED_VAR_NAME is the end of any variables so no name collision happens
+        scope.parent_scope = if let ParentScope::Normal(n) = scope
+            .parent_scope
+            .as_ref()
+            .expect("we declared a child scope")
+        {
+            Some(ParentScope::Normal(Box::new(Scope {
+                variables: n
+                    .variables
+                    .clone()
+                    .into_iter()
+                    .map(|(k, v)| (k + INJECTED_VAR_NAME, v))
+                    .collect(),
+                ..Scope::new(self.class_path.name().to_string() + "Constructor")
+            })))
+        } else {
+            log::error!("child scope does not have parent");
+            None
+        };
+        let mut arguments = arguments;
+        for argument in &mut arguments {
+            if let crate::ast::Node::VarReasign { new_value, .. } = argument
+                && let crate::ast::Node::VarRef(name) = &mut **new_value
+            {
+                *name += INJECTED_VAR_NAME
+            }
         }
+        scope.variables.extend(self.fields.clone());
+
+        // should run any VarAssigns for the class
+        let mut runtime = crate::runtime::Runtime::with_scope_and_nodes(arguments, scope);
+        runtime.run()?;
+        instance.set_fields(runtime.get_current_scope().variables.clone());
+        Ok(instance)
     }
 }
 impl PartialEq for RuntimeClass {
@@ -172,4 +216,30 @@ impl ClassPath {
     }
 }
 
-pub trait NativeClass {}
+#[derive(Debug, Clone, PartialEq)]
+pub enum Class {
+    Runtime(Arc<RuntimeClass>),
+    Native(Arc<dyn NativeClass>),
+}
+impl Class {
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Native(n) => n.name(),
+            Self::Runtime(r) => r.name(),
+        }
+    }
+}
+
+pub trait NativeClassInstance {}
+
+pub trait NativeClass: Debug + Send + Sync {
+    fn instantiate(&self, values: Vec<Value>)
+    -> Result<Arc<dyn NativeClassInstance>, RuntimeError>;
+    fn name(&self) -> &str;
+}
+impl PartialEq for dyn NativeClass {
+    fn eq(&self, _other: &Self) -> bool {
+        log::info!("fix native class eq");
+        true
+    }
+}

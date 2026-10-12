@@ -7,7 +7,7 @@ use log::{debug, error};
 
 use crate::ast::{MathSign, Node};
 use crate::ast::{Node::*, VariableAttributes};
-use crate::class::{ClassDefinitionError, ClassPath, RuntimeClass, RuntimeClassInstance};
+use crate::class::{Class, ClassDefinitionError, ClassPath, RuntimeClass, RuntimeClassInstance};
 use crate::functions::{Function, FunctionReturn, NativeFunction, NonNativeFunction};
 use crate::runtime::MathError::{InvalidTypeLeft, InvalidTypeRight};
 use crate::runtime::RuntimeError::{DoesNotExist, Other};
@@ -103,46 +103,14 @@ impl Runtime {
 
                 //class constructor
                 if let Some(class) = self.get_current_scope().get_class(&func_name) {
-                    //allows for Class(a:a);
-                    const INJECTED_VAR_NAME: &str = "@from_constructor";
-                    debug!("instantiating class {class:?}");
-                    let mut instance = class.instantiate();
-                    let mut scope = self.child_scope();
-
-                    scope.parent_scope = if let ParentScope::Normal(n) = scope
-                        .parent_scope
-                        .as_ref()
-                        .expect("we declared a child scope")
-                    {
-                        Some(ParentScope::Normal(Box::new(Scope {
-                            variables: n
-                                .variables
-                                .clone()
-                                .into_iter()
-                                .map(|(k, v)| (k + INJECTED_VAR_NAME, v))
-                                .collect(),
-                            ..Scope::new(class.class_path.name().to_string() + "Constructor")
-                        })))
-                    } else {
-                        error!("child scope does not have parent");
-                        None
-                    };
-                    let mut arguments = arguments;
-                    for argument in &mut arguments {
-                        if let Node::VarReasign { new_value, .. } = argument
-                            && let Node::VarRef(name) = &mut **new_value
-                        {
-                            *name += INJECTED_VAR_NAME
+                    match class {
+                        Class::Runtime(class) => {
+                            return Ok(Some(Value::Object(
+                                class.instantiate(arguments, self.child_scope())?,
+                            )));
                         }
+                        Class::Native(_) => unimplemented!(),
                     }
-                    scope.variables.extend(class.fields.clone());
-
-                    // should run any VarAssigns for the class
-                    let mut runtime = Runtime::with_scope_and_nodes(arguments, scope);
-                    runtime.run()?;
-                    instance.set_fields(runtime.current_scope.variables);
-
-                    return Ok(Some(Value::Object(instance)));
                 }
 
                 let Some(func) = self
@@ -226,14 +194,18 @@ impl Runtime {
                                     obj.class().name()
                                 ))),
                             //static variables
-                            Value::Class(class) => class
-                                .static_fields
-                                .get(&field_name)
-                                .map(|s| s.get_value().clone())
-                                .ok_or(RuntimeError::DoesNotExist(format!(
-                                    "static field {field_name} in class {}",
-                                    class.name()
-                                ))),
+                            Value::Class(class) => match class {
+                                Class::Runtime(class) => class
+                                    .static_fields
+                                    .get(&field_name)
+                                    .map(|s| s.get_value().clone())
+                                    .ok_or(RuntimeError::DoesNotExist(format!(
+                                        "static field {field_name} in class {}",
+                                        class.name()
+                                    ))),
+                                Class::Native(_) => unimplemented!(),
+                            },
+
                             v => Err(RuntimeError::TypeErrorMultiplePosibleValues {
                                 actual_value: v.value_type(),
                                 expected_values: vec![ValueType::Class, ValueType::Object],
@@ -424,7 +396,7 @@ pub enum Value {
     Array(Array),
     Object(RuntimeClassInstance),
     Float(f64),
-    Class(Arc<RuntimeClass>),
+    Class(Class),
     Null,
 }
 impl Value {
@@ -685,7 +657,7 @@ impl ParentScope {
             ParentScope::Normal(p) => p.with_function(name, c),
         }
     }
-    fn get_class(&self, name: &str) -> Option<Arc<RuntimeClass>> {
+    fn get_class(&self, name: &str) -> Option<Class> {
         match self {
             ParentScope::Mut(m) => m.lock().ok()?.get_class(name),
             ParentScope::Normal(p) => p.get_class(name),
@@ -695,12 +667,12 @@ impl ParentScope {
 
 #[derive(Debug, Clone)]
 pub struct Scope {
-    name: String,
+    pub(crate) name: String,
     pub(crate) parent_scope: Option<ParentScope>,
     pub(crate) variables: HashMap<String, Variable>,
-    static_variables: HashMap<String, Variable>,
-    functions: HashMap<String, Function>,
-    classes: HashMap<String, Arc<RuntimeClass>>,
+    pub(crate) static_variables: HashMap<String, Variable>,
+    pub(crate) functions: HashMap<String, Function>,
+    pub(crate) classes: HashMap<String, Class>,
 }
 impl Scope {
     pub fn new(name: String) -> Self {
@@ -828,7 +800,7 @@ impl Scope {
         }
     }
     ///after init is static variables currently but can be anything that needs to be run after the class is added
-    pub fn add_class(&mut self, class: Arc<RuntimeClass>) -> Result<(), RuntimeError> {
+    pub fn add_class(&mut self, class: Class) -> Result<(), RuntimeError> {
         if self.classes.contains_key(class.name()) {
             return Err(RuntimeError::AlreadyExists(format!(
                 "class {}",
@@ -836,8 +808,7 @@ impl Scope {
             )));
         }
         // let class = Arc::new(class);
-        self.classes
-            .insert(class.name().to_owned(), Arc::clone(&class));
+        self.classes.insert(class.name().to_owned(), class.clone());
         // self.add_constructor("<init>".to_string()+class.name())?;
 
         self.add_var(
@@ -852,26 +823,32 @@ impl Scope {
         class: RuntimeClass,
         after_init: Vec<Node>,
     ) -> Result<(), RuntimeError> {
-        let class = Arc::new(class);
+        let class = Class::Runtime(Arc::new(class));
         self.add_class(class.clone())?;
         let mut after_class_init = Runtime::with_scope_and_nodes(after_init, self.clone());
         after_class_init.run()?;
 
         self.static_variables.remove(class.name());
-        let mut class = Arc::unwrap_or_clone(class);
 
-        class.static_fields = after_class_init.current_scope.static_variables;
-        let class = Arc::new(class);
-        self.classes.insert(class.name().to_string(), class.clone());
+        if let Class::Runtime(r) = class {
+            let mut class = Arc::unwrap_or_clone(r);
+            class.static_fields = after_class_init.current_scope.static_variables;
+            let class = Class::Runtime(Arc::new(class));
+            self.classes.insert(class.name().to_string(), class.clone());
 
-        self.add_var(
-            class.name().to_string(),
-            Variable::with_attributes(Value::Class(class), VariableAttributes::attr_static()),
-        )?;
-        Ok(())
+            self.add_var(
+                class.name().to_string(),
+                Variable::with_attributes(Value::Class(class), VariableAttributes::attr_static()),
+            )?;
+            Ok(())
+        } else {
+            Err(RuntimeError::Other("idk figure this out later".to_string()))
+        }
+
+        // let class = Arc::new(class);
     }
 
-    pub fn get_class(&self, name: &str) -> Option<Arc<RuntimeClass>> {
+    pub fn get_class(&self, name: &str) -> Option<Class> {
         self.classes
             .get(name)
             .cloned()
@@ -891,7 +868,7 @@ impl Scope {
             self.add_var(name, var)?
         }
         for (_, class) in other.classes {
-            self.add_class(class)?
+            self.add_class(class)?;
         }
         Ok(())
     }

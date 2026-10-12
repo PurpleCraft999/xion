@@ -3,8 +3,10 @@ use std::collections::HashMap;
 use proc_macro::TokenStream;
 use quote::{ToTokens, format_ident, quote};
 use syn::{
-    Block, Expr, Fields, GenericArgument, Item, ItemEnum, ItemFn, ItemMod, LitStr, PathArguments,
-    ReturnType, Token, Type,
+    Block,
+    Expr::{self},
+    Fields, GenericArgument, Item, ItemEnum, ItemFn, ItemMod, ItemStruct, LitStr, Path,
+    PathArguments, ReturnType, Token, Type,
     parse::{Parse, ParseStream},
     parse_macro_input, parse_quote,
     punctuated::Punctuated,
@@ -15,7 +17,7 @@ pub fn lib(_attr: TokenStream, stream: TokenStream) -> TokenStream {
     let mut stream = parse_macro_input!(stream as ItemMod);
 
     let mut functions: Vec<(String, syn::Ident)> = Vec::new();
-
+    let mut classes = Vec::new();
     {
         let (_, content) = stream.content.as_ref().expect("must have body");
         for item in content {
@@ -36,8 +38,19 @@ pub fn lib(_attr: TokenStream, stream: TokenStream) -> TokenStream {
                     }
                 }
                 Item::Struct(s)
-                    if let Some(_a) =
-                        s.attrs.iter().find(|a| a.path().is_ident("native_class")) => {}
+                    if let Some(derive) = s.attrs.iter().find(|a| a.path().is_ident("derive")) =>
+                {
+                    let result = derive.parse_args_with(|input: syn::parse::ParseStream| {
+                        let paths = Punctuated::<Path, Token![,]>::parse_terminated(input)?;
+                        Ok(paths)
+                    });
+
+                    if let Ok(paths) = result
+                        && paths.iter().find(|p| p.is_ident("NativeClass")).is_some()
+                    {
+                        classes.push(s.ident.clone());
+                    }
+                }
                 _ => (), // let s = format!("{:?}",f.attrs.clone().into_iter().map(|a|a.meta.into_token_stream().to_string()).collect::<Vec<_>>());
                          // return quote!{compile_error!(#s);}.into();
             }
@@ -47,8 +60,23 @@ pub fn lib(_attr: TokenStream, stream: TokenStream) -> TokenStream {
             // }
         }
     }
+    let (_, content) = stream.content.as_mut().expect("must have body");
+    content.push(Item::Use(parse_quote!(
+        use std::sync::Arc;
+    )));
+    content.push(Item::Use(parse_quote!(
+        use crate::{
+            functions::NativeFunction,
+            class::{NativeClass, NativeClassInstance},
+            runtime::{FromValue, RuntimeError},
+            Value,
+        };
+    )));
+    content.push(Item::Use(parse_quote!(
+        use xion_interpreter_proc_macros::{native_function, NativeClass};
+    )));
+
     {
-        let (_, content) = stream.content.as_mut().expect("must have body");
         let functions: Vec<_> = functions
             .into_iter()
             .map(|(n, id)| {
@@ -61,31 +89,29 @@ pub fn lib(_attr: TokenStream, stream: TokenStream) -> TokenStream {
             quote! { (#a.to_string(), Arc::new(#b) as Arc<dyn NativeFunction>) }
         });
 
-        let get_fn = quote! {
+        let get_fn: ItemFn = parse_quote! {
             pub fn get_std_lib_fn()->Vec<(String,Arc<dyn NativeFunction>)>{
                 Vec::from([#(#functions),*])
             }
         };
-        let func: ItemFn = match syn::parse2(get_fn) {
-            Ok(s) => s,
-            Err(e) => return e.to_compile_error().into(),
+        content.push(Item::Fn(get_fn));
+    }
+
+    {
+        let classes = classes.iter().map(|c| {
+            // let name = c.to_string();
+
+            quote! {Arc::new(#c::__class_new_inner()) as Arc<dyn NativeClass>}
+        });
+
+        let get_class_func: ItemFn = parse_quote! {
+            pub fn get_std_lib_classes()->Vec<Arc<dyn NativeClass>>{
+
+                Vec::from([#(#classes),*])
+
+            }
         };
-
-        content.push(Item::Use(parse_quote!(
-            use std::sync::Arc;
-        )));
-        content.push(Item::Use(parse_quote!(
-            use crate::{
-                functions::NativeFunction,
-                runtime::{FromValue, RuntimeError},
-                Value,
-            };
-        )));
-        content.push(Item::Use(parse_quote!(
-            use xion_interpreter_proc_macros::native_function;
-        )));
-
-        content.push(Item::Fn(func));
+        content.push(Item::Fn(get_class_func));
     }
 
     quote! {#stream}.into()
@@ -122,7 +148,6 @@ impl Parse for NativeFunctionAttr {
         })
     }
 }
-
 //ai
 #[proc_macro_attribute]
 pub fn native_function(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -297,6 +322,91 @@ fn capitalize_first_letter(mut name: String) -> String {
     let first_letter = name.remove(0);
     name.insert(0, first_letter.to_ascii_uppercase());
     name
+}
+
+#[proc_macro_derive(NativeClass, attributes(value))]
+pub fn native_class(stream: TokenStream) -> TokenStream {
+    let class = parse_macro_input!(stream as ItemStruct);
+    let class_name = class.ident.clone();
+    let class_name_str = class_name.to_string();
+    let mut fields = Vec::new();
+    for field in class.fields.iter() {
+        if let Some(id) = &field.ident
+            && let Some(at) = field.attrs.iter().find(|a| a.path().is_ident("value"))
+            && let Ok(meta) = at.meta.require_name_value()
+        {
+            let value = meta.value.clone();
+            fields.push((id.clone(), field.ty.clone(), value));
+        }
+    }
+    let obj_struct_name = format_ident!("{class_name}Instance");
+
+    let obj_fields = fields
+        .iter()
+        .map(|(name, ty, _)| quote! {#name:#ty})
+        .collect::<Vec<_>>();
+    let obj_fields_name = fields
+        .iter()
+        .map(|(name, _, _)| quote!(#name))
+        .collect::<Vec<_>>();
+    let obj_struct: ItemStruct = parse_quote!(
+        pub struct #obj_struct_name{
+            #(#obj_fields),*
+
+
+
+        }
+
+
+
+    );
+
+    let default_field_values = fields
+        .iter()
+        .map(|(name, _, value)| quote! {let #name = #value.to_owned(); })
+        .collect::<Vec<_>>();
+
+    quote! {
+
+        impl #class_name{
+            const Name:&str = #class_name_str;
+            fn __class_new_inner()->Self{
+                #(#default_field_values)*
+                Self{
+
+                    #(#obj_fields_name),*
+
+                }
+            }
+        }
+
+
+        #obj_struct
+        impl NativeClassInstance for #obj_struct_name{}
+
+        impl NativeClass for #class_name{
+            fn instantiate(&self,values:Vec<Value>)->Result<Arc<dyn NativeClassInstance>,RuntimeError>{
+
+
+                #(#default_field_values)*
+
+
+                Ok(Arc::new(#obj_struct_name{#(#obj_fields_name),* }) as Arc<dyn NativeClassInstance>)
+
+
+
+
+            }
+            fn name(&self)->&str{
+                Self::Name
+            }
+
+        }
+
+
+    }.into()
+
+    // quote! {#class}.into()
 }
 
 //ai

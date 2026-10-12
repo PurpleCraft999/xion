@@ -568,7 +568,7 @@ fn test_nested_return() {
 fn test_class_static_var_access() {
     let nodes = vec![
         ClassDeclare {
-            name: "Test".to_string(),
+            name: "TestTest".to_string(),
             body: vec![Node::VarDeclare {
                 attributes: VariableAttributes::attr_static(),
                 name: "test".to_string(),
@@ -576,7 +576,7 @@ fn test_class_static_var_access() {
             }],
         },
         Node::Return(Some(Box::new(FieldAccess {
-            var_name: "Test".into(),
+            var_name: "TestTest".into(),
             field_name: "test".into(),
         }))),
     ];
@@ -586,6 +586,6 @@ fn test_class_static_var_access() {
 
 #[test]
 fn use_constructor_in_class_body() {
-    let s = run!(parse:"class Test{ let static test = Test();   }");
+    let s = run!(parse:"class TestTest{ let static test = TestTest();   }");
     assert_eq!(Ok(None), s)
 }

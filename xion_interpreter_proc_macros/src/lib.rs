@@ -73,7 +73,7 @@ pub fn lib(_attr: TokenStream, stream: TokenStream) -> TokenStream {
         };
     )));
     content.push(Item::Use(parse_quote!(
-        use xion_interpreter_proc_macros::{native_function, NativeClass};
+        use xion_interpreter_proc_macros::{native_function, NativeClass, NativeClassInstance};
     )));
 
     {
@@ -358,6 +358,7 @@ pub fn native_class(stream: TokenStream) -> TokenStream {
         .map(|(name, _, _)| quote!(#name))
         .collect::<Vec<_>>();
     let obj_struct: ItemStruct = parse_quote!(
+        #[derive(Debug,NativeClassInstance)]
         pub struct #obj_struct_name{
             #[allow(unused)]
             #(#obj_fields),*
@@ -402,22 +403,12 @@ pub fn native_class(stream: TokenStream) -> TokenStream {
                 }
             }
         }
-
-
-        #obj_struct
-        impl NativeClassInstance for #obj_struct_name{}
-
         impl NativeClass for #class_name{
             fn instantiate(&self,values:Vec<Value>)->Result<Arc<std::sync::Mutex<dyn NativeClassInstance>>,RuntimeError>{
 
-
                 #(#obj_create_field_values)*
 
-
                 Ok(Arc::new(std::sync::Mutex::new(#obj_struct_name{#(#obj_fields_name),* })) as Arc<std::sync::Mutex<dyn NativeClassInstance>>)
-
-
-
 
             }
             fn name(&self)->&str{
@@ -432,11 +423,40 @@ pub fn native_class(stream: TokenStream) -> TokenStream {
             }
 
         }
-
-
+        #obj_struct
     }.into()
 
     // quote! {#class}.into()
+}
+
+#[proc_macro_derive(NativeClassInstance)]
+pub fn r(stream: TokenStream) -> TokenStream {
+    let class_instance = parse_macro_input!(stream as ItemStruct);
+    let class_name = class_instance.ident;
+
+    quote! {
+        impl NativeClassInstance for #class_name{
+            fn call_method(&mut self,name:&str,args:Vec<Value>)->Result<Option<Value>, RuntimeError>{
+                panic!("not impl yet")
+            }
+            fn get_field(&self,name:&str)->Option<Variable>{
+                panic!("not impl yet")
+
+            }
+            fn class(&self)->Arc<dyn NativeClass>{
+                panic!("not impl yet")
+
+            }
+            fn get_field_mut(&mut self,name:&str)->Option<&mut Variable>{
+                panic!("not impl yet")
+
+            }
+        }
+
+
+
+
+    }.into()
 }
 
 //ai

@@ -7,7 +7,7 @@ use log::{debug, error};
 
 use crate::ast::{MathSign, Node};
 use crate::ast::{Node::*, VariableAttributes};
-use crate::class::{Class, ClassDefinitionError, ClassPath, RuntimeClass, RuntimeClassInstance};
+use crate::class::{Class, ClassDefinitionError, ClassInstance, ClassPath, RuntimeClass};
 use crate::functions::{Function, FunctionReturn, NativeFunction, NonNativeFunction};
 use crate::runtime::MathError::{InvalidTypeLeft, InvalidTypeRight};
 use crate::runtime::RuntimeError::{DoesNotExist, Other};
@@ -103,14 +103,9 @@ impl Runtime {
 
                 //class constructor
                 if let Some(class) = self.get_current_scope().get_class(&func_name) {
-                    match class {
-                        Class::Runtime(class) => {
-                            return Ok(Some(Value::Object(
-                                class.instantiate(arguments, self.child_scope())?,
-                            )));
-                        }
-                        Class::Native(_) => unimplemented!(),
-                    }
+                    return Ok(Some(Value::Object(
+                        class.instantiate(arguments, self.child_scope())?,
+                    )));
                 }
 
                 let Some(func) = self
@@ -225,15 +220,17 @@ impl Runtime {
                 Ok(self
                     .get_current_scope_mut()
                     .with_var_mut(&var_name, |var| match var.get_value_mut() {
-                        Value::Object(obj) => match obj.get_field_mut(&field_name) {
-                            Some(v) => {
-                                v.value = new_value;
+                        Value::Object(obj) => obj
+                            .get_field_mut(&field_name, |v| {
+                                *v.get_value_mut() = new_value;
                                 None
-                            }
-                            None => None,
-                        },
+                            })
+                            .flatten(),
                         e => {
-                            error!("reassigned field {field_name} on {}", e.value_type());
+                            error!(
+                                "tried to reassigned field {field_name} on {}",
+                                e.value_type()
+                            );
                             None
                         }
                     })
@@ -390,7 +387,7 @@ pub enum Value {
     Int(i64),
     Bool(bool),
     Array(Array),
-    Object(RuntimeClassInstance),
+    Object(ClassInstance),
     Float(f64),
     Class(Class),
     Null,

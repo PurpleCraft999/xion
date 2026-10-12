@@ -248,9 +248,71 @@ impl Class {
         }
     }
 }
+#[derive(Debug, Clone)]
 pub enum ClassInstance {
     Runtime(Arc<Mutex<RuntimeClassInstance>>),
     Native(Arc<Mutex<dyn NativeClassInstance>>),
+}
+impl ClassInstance {
+    pub fn call_method(&self, method_name: &str, args: Vec<Value>) -> RuntimeReturn {
+        match self {
+            Self::Runtime(r) => r.lock().expect("panicking").call_method(method_name, args),
+            Self::Native(n) => n.lock().expect("panicking").call_method(method_name, args),
+        }
+    }
+    pub fn get_field(&self, field_name: &str) -> Option<Variable> {
+        match self {
+            Self::Runtime(r) => r.lock().expect("panicking").get_field(field_name).cloned(),
+            Self::Native(n) => n.lock().expect("panicking").get_field(field_name),
+        }
+    }
+    pub fn get_field_mut<T>(
+        &self,
+        field_name: &str,
+        f: impl FnOnce(&mut Variable) -> T,
+    ) -> Option<T> {
+        match self {
+            Self::Runtime(r) => r
+                .lock()
+                .expect("panicking")
+                .get_field_mut(field_name)
+                .map(f),
+            Self::Native(n) => n
+                .lock()
+                .expect("panicking")
+                .get_field_mut(field_name)
+                .map(f),
+        }
+    }
+    pub fn class(&self) -> Class {
+        match self {
+            Self::Runtime(r) => Class::Runtime(r.lock().expect("panicking").class()),
+            Self::Native(n) => Class::Native(n.lock().expect("panicking").class()),
+        }
+    }
+}
+impl PartialEq for ClassInstance {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Runtime(left), Self::Runtime(right)) => {
+                *left.lock().expect("pancking") == *right.lock().expect("panicking")
+            }
+            (Self::Native(left), Self::Native(right)) => {
+                *left.lock().expect("pancking") == *right.lock().expect("panicking")
+            }
+            //they couldnt possibly be equal
+            (Self::Native(_), Self::Runtime(_)) => false,
+            (Self::Runtime(_), Self::Native(_)) => false,
+        }
+    }
+}
+impl Display for ClassInstance {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Native(n) => write!(f, "{n:?}"),
+            Self::Runtime(r) => write!(f, "{}", r.lock().expect("panicking")),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -270,7 +332,18 @@ impl<T: Into<Value> + Debug + Clone> Static<T> {
     }
 }
 
-pub trait NativeClassInstance {}
+pub trait NativeClassInstance: Debug + Send + Sync {
+    fn call_method(&mut self, name: &str, args: Vec<Value>) -> RuntimeReturn;
+    fn get_field(&self, name: &str) -> Option<Variable>;
+    fn class(&self) -> Arc<dyn NativeClass>;
+    fn get_field_mut(&mut self, name: &str) -> Option<&mut Variable>;
+}
+impl PartialEq for dyn NativeClassInstance {
+    fn eq(&self, other: &Self) -> bool {
+        //TODO make this check fields
+        self.class() == other.class()
+    }
+}
 
 pub trait NativeClass: Debug + Send + Sync {
     fn instantiate(

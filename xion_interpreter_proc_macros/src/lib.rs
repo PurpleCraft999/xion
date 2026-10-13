@@ -158,10 +158,28 @@ fn get_inner_type(ty: &Type, name: &str) -> Option<Type> {
         && let PathArguments::AngleBracketed(args) = &segment.arguments
         && let Some(GenericArgument::Type(inner_ty)) = args.args.first()
     {
-        return Some(inner_ty.clone());
+        Some(inner_ty.clone())
+    } else {
+        None
     }
+}
+fn get_inner_types(ty: &Type, name: &str) -> Option<Vec<Type>> {
+    if let Type::Path(type_path) = ty
+        && let Some(segment) = type_path.path.segments.last()
+        && segment.ident == name
+        && let PathArguments::AngleBracketed(args) = &segment.arguments
+    {
+        let mut types = Vec::new();
+        for arg in args.args.clone() {
+            if let GenericArgument::Type(t) = arg {
+                types.push(t);
+            }
+        }
 
-    None
+        Some(types)
+    } else {
+        None
+    }
 }
 
 struct ParsedFunction {
@@ -277,12 +295,39 @@ fn parse_function(
                 Ok(None)
             }
         }
-        ReturnType::Type(_, ty) if let Some(_) = get_inner_type_from(ty, "Option") => {
+        ReturnType::Type(_, ty) if get_inner_type_from(ty, "Option").is_some() => {
             quote! {
                 let res = #this #fn_name(#(#arg_names),*);
                 match res {
                     Some(val) => Ok(Some(Value::from(val))),
                     None => Ok(Some(Value::Null)),
+                }
+            }
+        }
+        ReturnType::Type(_, ty) if let Some(re) = get_inner_types(ty, "Result") => {
+            let ok = re.first().expect("has ok value");
+
+            let ret_handle = if get_inner_type(ok, "Option").is_some() {
+                quote! {match res{
+                    Some(r)=>Some(Value::From(r)),
+                    None=>Some(Value::Null),
+                }}
+            } else
+            //check for unit
+            if let Type::Tuple(tup) = ok
+                && tup.elems.is_empty()
+            {
+                quote! {Some(Value::Null)}
+            } else {
+                quote! {Some(Value::from(res))}
+            };
+
+            quote! {
+                let res = #this #fn_name(#(#arg_names),*);
+
+                match res{
+                    Ok(res) => Ok(#ret_handle),
+                    Err(e)=>Err(e),
                 }
             }
         }

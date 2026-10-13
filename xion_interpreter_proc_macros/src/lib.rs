@@ -29,8 +29,10 @@ pub fn lib(_attr: TokenStream, stream: TokenStream) -> TokenStream {
                         .find(|a| a.path().is_ident("native_function"))
                     {
                         let actual_fn_name = f.sig.ident.clone();
-                        let fn_name = if let Ok(s) = a.parse_args::<LitStr>() {
-                            s.value()
+                        let fn_name = if let Ok(s) = a.parse_args::<NativeFunctionAttr>()
+                            && let Some(name) = s.function_name
+                        {
+                            name.value()
                         } else {
                             actual_fn_name.clone().to_string()
                         };
@@ -166,12 +168,13 @@ struct ParsedFunction {
     args: Vec<TokenStream2>,
     length_check: TokenStream2,
     handle_return: TokenStream2,
+    xion_name: TokenStream2,
 }
 
 fn parse_function(
     input_fn: &ItemFn,
     fn_name: &syn::Ident,
-    fn_name_str: &TokenStream2,
+    attr: &NativeFunctionAttr,
     self_func: bool,
 ) -> ParsedFunction {
     let mut arg_extractions = Vec::new();
@@ -181,7 +184,12 @@ fn parse_function(
     let mut max_args = 0usize;
 
     let get_inner_type_from = get_inner_type;
-
+    let fn_name_code = if let Some(name) = &attr.function_name {
+        let name = format_ident!("{}", name.value());
+        quote! {#name}
+    } else {
+        quote! {#fn_name}
+    };
     // Check if there is exactly 1 parameter and it is a `Vec<T>`
     if input_fn.sig.inputs.len() == 1
         && let syn::FnArg::Typed(pat_type) = &input_fn.sig.inputs[0]
@@ -247,6 +255,7 @@ fn parse_function(
 
     let num_args = arg_names.len();
 
+    let fn_name_str = fn_name.to_string().to_token_stream();
     let length_check = if skip_length_check {
         quote! {}
     } else {
@@ -289,6 +298,7 @@ fn parse_function(
         args: arg_extractions,
         length_check,
         handle_return: return_handling,
+        xion_name: fn_name_code,
     }
 }
 
@@ -299,11 +309,7 @@ pub fn native_function(attr: TokenStream, item: TokenStream) -> TokenStream {
     let fn_name = &input_fn.sig.ident;
 
     let attr = parse_macro_input!(attr as NativeFunctionAttr);
-    let fn_name_str = if let Some(name) = attr.function_name {
-        quote! {#name}
-    } else {
-        quote! {#fn_name}.to_string().to_token_stream()
-    };
+
     // Generate a unique struct name, e.g., `add` -> `AddFn`
     let struct_name_str: String = format!("{}Fn", make_pascal_case_from_snake(fn_name.to_string()));
     let struct_name = syn::Ident::new(&struct_name_str, fn_name.span());
@@ -312,7 +318,8 @@ pub fn native_function(attr: TokenStream, item: TokenStream) -> TokenStream {
         args,
         length_check,
         handle_return: return_handling,
-    } = parse_function(&input_fn, fn_name, &fn_name_str, false);
+        xion_name: _,
+    } = parse_function(&input_fn, fn_name, &attr, false);
 
     let expanded = quote! {
         // Keep the original function intact
@@ -499,19 +506,13 @@ pub fn instance_method(attr: TokenStream, item: TokenStream) -> TokenStream {
     let fn_name = input_fn.sig.ident.clone();
 
     let attr = parse_macro_input!(attr as NativeFunctionAttr);
-    let name = if let Some(name) = attr.function_name {
-        format_ident!("{}", name.value())
-    } else {
-        input_fn.sig.ident.clone()
-    };
-
-    let fn_name_str = name.to_string().to_token_stream();
 
     let ParsedFunction {
         args,
         length_check,
         handle_return,
-    } = parse_function(&input_fn, &fn_name, &fn_name_str, true);
+        xion_name: name,
+    } = parse_function(&input_fn, &fn_name, &attr, true);
 
     let gen_sig = format_ident!("{name}_method");
 

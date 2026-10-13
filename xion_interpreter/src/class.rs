@@ -309,7 +309,7 @@ impl PartialEq for ClassInstance {
 impl Display for ClassInstance {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Native(n) => write!(f, "{n:?}"),
+            Self::Native(n) => write!(f, "{:?}", n.lock().expect("panicking")),
             Self::Runtime(r) => write!(f, "{}", r.lock().expect("panicking")),
         }
     }

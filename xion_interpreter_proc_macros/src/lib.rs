@@ -1,12 +1,12 @@
-use std::collections::HashMap;
-
 use proc_macro::TokenStream;
+use proc_macro2::TokenStream as TokenStream2;
 use quote::{ToTokens, format_ident, quote};
+use std::collections::HashMap;
 use syn::{
     Block,
     Expr::{self},
-    Fields, GenericArgument, Item, ItemEnum, ItemFn, ItemMod, ItemStruct, LitStr, Path,
-    PathArguments, ReturnType, Token, Type,
+    Fields, GenericArgument, ImplItem, ImplItemFn, Item, ItemEnum, ItemFn, ItemImpl, ItemMod,
+    ItemStruct, LitStr, Path, PathArguments, ReturnType, Token, Type,
     parse::{Parse, ParseStream},
     parse_macro_input, parse_quote,
     punctuated::Punctuated,
@@ -162,21 +162,18 @@ fn get_inner_type(ty: &Type, name: &str) -> Option<Type> {
     None
 }
 
-//ai
-#[proc_macro_attribute]
-pub fn native_function(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let input_fn = parse_macro_input!(item as ItemFn);
-    let fn_name = &input_fn.sig.ident;
-    let attr = parse_macro_input!(attr as NativeFunctionAttr);
-    let fn_name_str = if let Some(name) = attr.function_name {
-        quote! {#name}
-    } else {
-        quote! {#fn_name}.to_string().to_token_stream()
-    };
-    // Generate a unique struct name, e.g., `add` -> `AddFn`
-    let struct_name_str: String = format!("{}Fn", make_pascal_case_from_snake(fn_name.to_string()));
-    let struct_name = syn::Ident::new(&struct_name_str, fn_name.span());
+struct ParsedFunction {
+    args: Vec<TokenStream2>,
+    length_check: TokenStream2,
+    handle_return: TokenStream2,
+}
 
+fn parse_function(
+    input_fn: &ItemFn,
+    fn_name: &syn::Ident,
+    fn_name_str: &TokenStream2,
+    self_func: bool,
+) -> ParsedFunction {
     let mut arg_extractions = Vec::new();
     let mut arg_names = Vec::new();
     let mut skip_length_check = false;
@@ -259,17 +256,21 @@ pub fn native_function(attr: TokenStream, item: TokenStream) -> TokenStream {
             }
         }
     };
-
+    let this = if self_func {
+        quote! {self.}
+    } else {
+        quote! {}
+    };
     let return_handling = match &input_fn.sig.output {
         ReturnType::Default => {
             quote! {
-                #fn_name(#(#arg_names),*);
+                #this #fn_name(#(#arg_names),*);
                 Ok(None)
             }
         }
         ReturnType::Type(_, ty) if let Some(_) = get_inner_type_from(ty, "Option") => {
             quote! {
-                let res = #fn_name(#(#arg_names),*);
+                let res = #this #fn_name(#(#arg_names),*);
                 match res {
                     Some(val) => Ok(Some(Value::from(val))),
                     None => Ok(Some(Value::Null)),
@@ -279,11 +280,39 @@ pub fn native_function(attr: TokenStream, item: TokenStream) -> TokenStream {
 
         ReturnType::Type(_, _ty) => {
             quote! {
-                let res = #fn_name(#(#arg_names),*);
+                let res = #this #fn_name(#(#arg_names),*);
                 Ok(Some(Value::from(res)))
             }
         }
     };
+    ParsedFunction {
+        args: arg_extractions,
+        length_check,
+        handle_return: return_handling,
+    }
+}
+
+//ai
+#[proc_macro_attribute]
+pub fn native_function(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input_fn = parse_macro_input!(item as ItemFn);
+    let fn_name = &input_fn.sig.ident;
+
+    let attr = parse_macro_input!(attr as NativeFunctionAttr);
+    let fn_name_str = if let Some(name) = attr.function_name {
+        quote! {#name}
+    } else {
+        quote! {#fn_name}.to_string().to_token_stream()
+    };
+    // Generate a unique struct name, e.g., `add` -> `AddFn`
+    let struct_name_str: String = format!("{}Fn", make_pascal_case_from_snake(fn_name.to_string()));
+    let struct_name = syn::Ident::new(&struct_name_str, fn_name.span());
+
+    let ParsedFunction {
+        args,
+        length_check,
+        handle_return: return_handling,
+    } = parse_function(&input_fn, fn_name, &fn_name_str, false);
 
     let expanded = quote! {
         // Keep the original function intact
@@ -301,7 +330,7 @@ pub fn native_function(attr: TokenStream, item: TokenStream) -> TokenStream {
                 #length_check
 
                 // 2. Extract and type-check arguments dynamically
-                #(#arg_extractions)*
+                #(#args)*
 
                 #return_handling
             }
@@ -430,14 +459,14 @@ pub fn native_class(stream: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_derive(NativeClassInstance)]
-pub fn r(stream: TokenStream) -> TokenStream {
+pub fn native_class_instance(stream: TokenStream) -> TokenStream {
     let class_instance = parse_macro_input!(stream as ItemStruct);
     let class_name = class_instance.ident;
 
     quote! {
         impl NativeClassInstance for #class_name{
             fn call_method(&mut self,name:&str,args:Vec<Value>)->Result<Option<Value>, RuntimeError>{
-                panic!("not impl yet")
+                self.__method_call(name,args)
             }
             fn get_field(&self,name:&str)->Option<Variable>{
                 panic!("not impl yet")
@@ -453,10 +482,111 @@ pub fn r(stream: TokenStream) -> TokenStream {
             }
         }
 
+        impl From<#class_name> for Value {
+            fn from(val: #class_name) -> Self {
+                Value::Object(crate::class::ClassInstance::Native(Arc::new(std::sync::Mutex::new(val)) as Arc<std::sync::Mutex<dyn NativeClassInstance>>) )
+            }
+        }
 
 
 
     }.into()
+}
+
+#[proc_macro_attribute]
+pub fn instance_method(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input_fn = parse_macro_input!(item as ItemFn);
+    let fn_name = input_fn.sig.ident.clone();
+
+    let attr = parse_macro_input!(attr as NativeFunctionAttr);
+    let name = if let Some(name) = attr.function_name {
+        format_ident!("{}", name.value())
+    } else {
+        input_fn.sig.ident.clone()
+    };
+
+    let fn_name_str = name.to_string().to_token_stream();
+
+    let ParsedFunction {
+        args,
+        length_check,
+        handle_return,
+    } = parse_function(&input_fn, &fn_name, &fn_name_str, true);
+
+    let gen_sig = format_ident!("{name}_method");
+
+    quote! {
+
+        #input_fn
+
+        fn #gen_sig(&self,args:Vec<Value>)->Result<Option<Value>, RuntimeError>{
+            #length_check
+
+            #(#args)*
+
+            #handle_return
+
+        }
+
+
+
+    }
+    .into()
+}
+
+#[proc_macro_attribute]
+pub fn native_class_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let mut block = parse_macro_input!(item as ItemImpl);
+
+    let ty = block.self_ty.clone();
+
+    let mut funcs = Vec::new();
+    //more items will be added
+    #[allow(clippy::single_match)]
+    for item in &block.items {
+        match item {
+            ImplItem::Fn(func)
+                if let Some(a) = func
+                    .attrs
+                    .iter()
+                    .find(|a| a.path().is_ident("instance_method")) =>
+            {
+                // funcs.push(func.sig.ident.clone());
+                let actual_fn_name = func.sig.ident.clone();
+                let fn_name = if let Ok(s) = a.parse_args::<LitStr>() {
+                    s.value()
+                } else {
+                    actual_fn_name.clone().to_string()
+                };
+                funcs.push((fn_name, actual_fn_name));
+            }
+            _ => (),
+        }
+    }
+
+    let call_funcs = funcs
+        .iter()
+        .map(|(name, _)| {
+            let name_str = name.to_string();
+            let func_name = format_ident!("{name}_method");
+
+            quote! {#name_str=>self.#func_name(args)}
+        })
+        .collect::<Vec<_>>();
+
+    let class_ty = quote! {#ty}.to_string();
+
+    let func: ImplItemFn = parse_quote!(
+        fn __method_call(&mut self, name: &str, args: Vec<Value>) -> Result<Option<Value>, RuntimeError> {
+            match name{
+                #(#call_funcs),*,
+                _=>Err(RuntimeError::DoesNotExist(format!("method {name} in class {}",#class_ty)))
+            }
+        }
+    );
+
+    block.items.push(ImplItem::Fn(func));
+    block.into_token_stream().into()
 }
 
 //ai

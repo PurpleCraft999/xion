@@ -2,6 +2,7 @@ use xion_interpreter_proc_macros::lib;
 
 #[lib]
 mod lang {
+    use xion_interpreter_proc_macros::instance_method;
 
     // use super::*;
     #[native_function]
@@ -43,6 +44,20 @@ mod lang {
         name: String,
         #[value = 4]
         id: Static<i64>,
+    }
+
+    #[xion_interpreter_proc_macros::native_class_impl]
+    impl TestInstance {
+        #[instance_method]
+        fn name(&self) -> String {
+            self.name.clone()
+        }
+        #[instance_method("clone")]
+        fn me(&self) -> Self {
+            TestInstance {
+                name: "sub-test".to_string(),
+            }
+        }
     }
 }
 #[lib]

@@ -56,6 +56,7 @@ mod lang {
         fn me(&self) -> Self {
             TestInstance {
                 name: "sub-test".to_string(),
+                class: self.class(),
             }
         }
     }

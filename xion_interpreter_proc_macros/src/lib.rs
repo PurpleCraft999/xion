@@ -442,7 +442,8 @@ pub fn native_class(stream: TokenStream) -> TokenStream {
         #[derive(Debug,NativeClassInstance)]
         pub struct #obj_struct_name{
             #[allow(unused)]
-            #(#obj_fields),*
+            #(#obj_fields),*,
+            class:Arc<dyn NativeClass>
         }
     );
 
@@ -485,11 +486,11 @@ pub fn native_class(stream: TokenStream) -> TokenStream {
             }
         }
         impl NativeClass for #class_name{
-            fn instantiate(&self,values:Vec<Value>)->Result<Arc<std::sync::Mutex<dyn NativeClassInstance>>,RuntimeError>{
+            fn instantiate(&self,this:Arc<dyn NativeClass>,values:Vec<Value>)->Result<Arc<std::sync::Mutex<dyn NativeClassInstance>>,RuntimeError>{
 
                 #(#obj_create_field_values)*
 
-                Ok(Arc::new(std::sync::Mutex::new(#obj_struct_name{#(#obj_fields_name),* })) as Arc<std::sync::Mutex<dyn NativeClassInstance>>)
+                Ok(Arc::new(std::sync::Mutex::new(#obj_struct_name{#(#obj_fields_name),*,class:this })) as Arc<std::sync::Mutex<dyn NativeClassInstance>>)
 
             }
             fn name(&self)->&str{
@@ -515,17 +516,32 @@ pub fn native_class_instance(stream: TokenStream) -> TokenStream {
     let class_instance = parse_macro_input!(stream as ItemStruct);
     let class_name = class_instance.ident;
 
+    let field_names = class_instance
+        .fields
+        .iter()
+        .map(|f| f.ident.clone().expect("has field name"))
+        .map(|i| {
+            let name_str = i.to_string();
+            quote! {#name_str=>Some(Variable::new(Value::from(self.#i.to_owned())))}
+        })
+        .collect::<Vec<_>>();
+
     quote! {
         impl NativeClassInstance for #class_name{
             fn call_method(&mut self,name:&str,args:Vec<Value>)->Result<Option<Value>, RuntimeError>{
                 self.__method_call(name,args)
             }
             fn get_field(&self,name:&str)->Option<Variable>{
-                panic!("not impl yet")
+                match name{
+                    #(#field_names),*,
+                    _=>None
+
+
+                }
 
             }
             fn class(&self)->Arc<dyn NativeClass>{
-                panic!("not impl yet")
+                self.class.clone()
 
             }
             fn get_field_mut(&mut self,name:&str)->Option<&mut Variable>{

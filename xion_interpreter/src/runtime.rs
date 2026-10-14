@@ -7,7 +7,9 @@ use log::{debug, error};
 
 use crate::ast::{MathSign, Node};
 use crate::ast::{Node::*, VariableAttributes};
-use crate::class::{Class, ClassDefinitionError, ClassInstance, ClassPath, RuntimeClass};
+use crate::class::{
+    Class, ClassDefinitionError, ClassInstance, ClassPath, NativeClass, RuntimeClass,
+};
 use crate::functions::{Function, FunctionReturn, NativeFunction, NonNativeFunction};
 use crate::runtime::MathError::{InvalidTypeLeft, InvalidTypeRight};
 use crate::runtime::RuntimeError::{DoesNotExist, Other};
@@ -530,6 +532,12 @@ impl FromValue for Value {
         Self: Sized,
     {
         Ok(value)
+    }
+}
+
+impl From<Arc<dyn NativeClass>> for Value {
+    fn from(value: Arc<dyn NativeClass>) -> Self {
+        Self::Class(Class::Native(value))
     }
 }
 

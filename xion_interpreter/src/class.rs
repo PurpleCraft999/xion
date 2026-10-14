@@ -244,7 +244,9 @@ impl Class {
             Self::Runtime(r) => r
                 .instantiate(args, scope)
                 .map(|r| ClassInstance::Runtime(Arc::new(Mutex::new(r)))),
-            Self::Native(n) => n.instantiate(Vec::new()).map(ClassInstance::Native),
+            Self::Native(n) => n
+                .instantiate(n.clone(), Vec::new())
+                .map(ClassInstance::Native),
         }
     }
 }
@@ -348,6 +350,7 @@ impl PartialEq for dyn NativeClassInstance {
 pub trait NativeClass: Debug + Send + Sync {
     fn instantiate(
         &self,
+        this: Arc<dyn NativeClass>,
         values: Vec<Value>,
     ) -> Result<Arc<Mutex<dyn NativeClassInstance>>, RuntimeError>;
     fn name(&self) -> &str;

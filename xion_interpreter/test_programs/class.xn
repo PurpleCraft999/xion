@@ -18,4 +18,5 @@ print(Point.origin);
 print("test id: "+Test.id);
 let test = Test();
 print(test.name());
+print(test.name);
 print(test.clone());

@@ -218,25 +218,20 @@ impl Runtime {
                 new_value,
             } => {
                 let new_value = self.eval(*new_value)?.ok_or(RuntimeError::RequireValue)?;
-
-                Ok(self
-                    .get_current_scope_mut()
-                    .with_var_mut(&var_name, |var| match var.get_value_mut() {
-                        Value::Object(obj) => obj
-                            .get_field_mut(&field_name, |v| {
-                                *v.get_value_mut() = new_value;
-                                None
-                            })
-                            .flatten(),
+                self.get_current_scope_mut().with_var_mut(&var_name, |var| {
+                    match var.get_value_mut() {
+                        Value::Object(obj) => obj.get_field_mut(&field_name, |v| {
+                            *v.get_value_mut() = new_value;
+                        }),
                         e => {
                             error!(
                                 "tried to reassigned field {field_name} on {}",
                                 e.value_type()
                             );
-                            None
                         }
-                    })
-                    .flatten())
+                    }
+                });
+                Ok(None)
             }
             If { condition, body } => {
                 let condition = self.eval(*condition)?.ok_or(RuntimeError::RequireValue)?;
@@ -535,12 +530,6 @@ impl FromValue for Value {
     }
 }
 
-impl From<Arc<dyn NativeClass>> for Value {
-    fn from(value: Arc<dyn NativeClass>) -> Self {
-        Self::Class(Class::Native(value))
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct Array(Vec<Value>);
 impl Display for Array {
@@ -553,6 +542,31 @@ pub trait FromValue {
     fn from_value(value: Value) -> Result<Self, RuntimeError>
     where
         Self: Sized;
+}
+
+impl From<Arc<dyn NativeClass>> for Value {
+    fn from(value: Arc<dyn NativeClass>) -> Self {
+        Value::Class(Class::Native(value))
+    }
+}
+impl FromValue for Arc<dyn NativeClass> {
+    fn from_value(value: Value) -> Result<Self, RuntimeError>
+    where
+        Self: Sized,
+    {
+        match value {
+            Value::Class(c) => match c {
+                Class::Native(n) => Ok(n),
+                Class::Runtime(_) => Err(RuntimeError::Other(
+                    "expected native class found runtime class".to_string(),
+                )),
+            },
+            e => Err(RuntimeError::TypeError {
+                actual_value: e.value_type(),
+                expected_value: ValueType::Class,
+            }),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

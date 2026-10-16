@@ -8,7 +8,6 @@ for loops
 conversion functions for types
 
 native class methods,constructor,
-native object fields
 
 
 function call into method_call. eg return_string().len();

@@ -525,6 +525,15 @@ pub fn native_class_instance(stream: TokenStream) -> TokenStream {
             quote! {#name_str=>Some(Variable::new(Value::from(self.#i.to_owned())))}
         })
         .collect::<Vec<_>>();
+    let field_names_mut = class_instance
+        .fields
+        .iter()
+        .map(|f| (f.ident.clone().expect("has field name"),f.ty.clone()))
+        .map(|(i,ty)| {
+            let name_str = i.to_string();
+            quote! {#name_str=>self.#i= <#ty>::from_value(v.to_value()).expect("literally just made from this type")}
+        })
+        .collect::<Vec<_>>();
 
     quote! {
         impl NativeClassInstance for #class_name{
@@ -544,8 +553,23 @@ pub fn native_class_instance(stream: TokenStream) -> TokenStream {
                 self.class.clone()
 
             }
-            fn get_field_mut(&mut self,name:&str)->Option<&mut Variable>{
-                panic!("not impl yet")
+            fn get_field_mut(&mut self, name: &str,f:Box<dyn FnOnce(&mut Variable)>){
+                let var = match name{
+                    #(#field_names),*,
+                    _=>None
+
+
+                };
+                if let Some(v) =var{
+                    let mut v = v;
+                    f(&mut v);
+                    match name{
+                        #(#field_names_mut),*,
+                        _=>()
+                    }
+                }
+
+
 
             }
         }
@@ -581,7 +605,7 @@ pub fn instance_method(attr: TokenStream, item: TokenStream) -> TokenStream {
 
         #input_fn
 
-        fn #gen_sig(&self,args:Vec<Value>)->Result<Option<Value>, RuntimeError>{
+        fn #gen_sig(&mut self,args:Vec<Value>)->Result<Option<Value>, RuntimeError>{
             #length_check
 
             #(#args)*
@@ -730,6 +754,7 @@ pub fn value_helper(attr: TokenStream, item: TokenStream) -> TokenStream {
                         #enum_name::#variant_ident(val)
                     }
                 }
+
 
 
                 // 2. impl FromValue for Type

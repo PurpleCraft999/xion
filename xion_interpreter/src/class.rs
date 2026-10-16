@@ -268,22 +268,18 @@ impl ClassInstance {
             Self::Native(n) => n.lock().expect("panicking").get_field(field_name),
         }
     }
-    pub fn get_field_mut<T>(
-        &self,
-        field_name: &str,
-        f: impl FnOnce(&mut Variable) -> T,
-    ) -> Option<T> {
+    pub fn get_field_mut(&self, field_name: &str, f: impl FnOnce(&mut Variable) + 'static) {
         match self {
-            Self::Runtime(r) => r
-                .lock()
-                .expect("panicking")
-                .get_field_mut(field_name)
-                .map(f),
+            Self::Runtime(r) => {
+                r.lock()
+                    .expect("panicking")
+                    .get_field_mut(field_name)
+                    .map(f);
+            }
             Self::Native(n) => n
                 .lock()
                 .expect("panicking")
-                .get_field_mut(field_name)
-                .map(f),
+                .get_field_mut(field_name, Box::new(f)),
         }
     }
     pub fn class(&self) -> Class {
@@ -338,7 +334,7 @@ pub trait NativeClassInstance: Debug + Send + Sync {
     fn call_method(&mut self, name: &str, args: Vec<Value>) -> RuntimeReturn;
     fn get_field(&self, name: &str) -> Option<Variable>;
     fn class(&self) -> Arc<dyn NativeClass>;
-    fn get_field_mut(&mut self, name: &str) -> Option<&mut Variable>;
+    fn get_field_mut(&mut self, name: &str, f: Box<dyn FnOnce(&mut Variable)>);
 }
 impl PartialEq for dyn NativeClassInstance {
     fn eq(&self, other: &Self) -> bool {

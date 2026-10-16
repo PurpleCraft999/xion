@@ -59,6 +59,8 @@ mod lang {
                 class: self.class(),
             }
         }
+        #[instance_method]
+        fn set_name(&mut self) {}
     }
 }
 #[lib]

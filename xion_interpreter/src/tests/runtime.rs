@@ -493,8 +493,7 @@ fn test_method_call() {
 
 #[test]
 fn floating_point_math() {
-    let s = crate::token::Lexer::new(
-        r#"
+    let s = r#"
 let a =(5.0*1.1);
 let b =(5.0/1.1);
 let c =(5.0+1.1);
@@ -508,13 +507,11 @@ let j =(5/2.0);
 let k =(5+2.0);
 let l =(5-2.0);
 let m =(5.0+"");
-let n =(""+5.0);"#,
-    )
-    .lex();
+let n =(""+5.0);"#;
 
-    let s = AstBuilder::new(s).build();
+    //     let s = AstBuilder::new(s).build().expect("valid ast");
 
-    let run = run!(s;Runtime);
+    let run = run!(parse:s;Runtime);
 
     let expected = HashMap::from([
         ("a", 5.5),
@@ -588,4 +585,23 @@ fn test_class_static_var_access() {
 fn use_constructor_in_class_body() {
     let s = run!(parse:"class TestTest{ let static test = TestTest();   }");
     assert_eq!(Ok(None), s)
+}
+
+#[test]
+fn func_call_into_call() {
+    // let ast = ast(vec![Name("test_fn"),LeftParen,RightParen,Dot,Name("func2"),LeftParen,RightParen,SemiColon]);
+
+    let run = run!(parse:"class Not{ fn yet(x){return x+3;} } return Not().yet(2);");
+
+    assert_eq!(Ok(Some(Value::Int(5))), run)
+}
+#[test]
+fn func_call_into_field_access() {
+    let run = run!(parse:"class Not{let yet = 0.4;} return Not().yet;");
+    assert_eq!(Ok(Some(Value::Float(0.4))), run)
+}
+#[test]
+fn field_access_into_func_call() {
+    let run = run!(parse:"class Yet{fn c(){return 0;}}   class Not{let yet = Yet();} return Not().yet.c();");
+    assert_eq!(Ok(Some(Value::Int(0))), run)
 }

@@ -12,7 +12,7 @@ const FALSE: Token = Token::BoolLiteral(false);
 
 fn ast(vec: Vec<Token>) -> Vec<Node> {
     crate::test_log::init_logger();
-    AstBuilder::new(vec).build()
+    AstBuilder::new(vec).build().expect("valid ast")
 }
 #[allow(non_snake_case)]
 fn Name(name: &str) -> Token {
@@ -353,6 +353,54 @@ fn parse_static_var() {
             },
             name: "var".to_string(),
             value: Box::new(Node::NumberLiteral(2))
+        }],
+        ast
+    );
+}
+
+#[test]
+fn func_call_into_call() {
+    let ast = ast(vec![
+        Name("test_fn"),
+        LeftParen,
+        RightParen,
+        Dot,
+        Name("func2"),
+        LeftParen,
+        RightParen,
+        SemiColon,
+    ]);
+    assert_eq!(
+        vec![Node::FnCallIntoOther {
+            func: Box::new(Node::FnCall {
+                name: "test_fn".to_string(),
+                arguments: vec![]
+            }),
+            other: Box::new(Node::FnCall {
+                name: "func2".to_string(),
+                arguments: vec![]
+            })
+        }],
+        ast
+    );
+}
+#[test]
+fn func_call_into_field_access() {
+    let ast = ast(vec![
+        Name("test_fn"),
+        LeftParen,
+        RightParen,
+        Dot,
+        Name("field"),
+        SemiColon,
+    ]);
+    assert_eq!(
+        vec![Node::FnCallIntoOther {
+            func: Box::new(Node::FnCall {
+                name: "test_fn".to_string(),
+                arguments: vec![]
+            }),
+            other: Box::new(Node::VarRef("field".to_string()))
         }],
         ast
     );

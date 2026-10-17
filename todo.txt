@@ -8,8 +8,6 @@ for loops
 conversion functions for types
 
 
-
-function call into method_call. eg return_string().len();
 static methods
 
 Make toml for imports instead

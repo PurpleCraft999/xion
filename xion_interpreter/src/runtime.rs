@@ -158,15 +158,10 @@ impl Runtime {
                 args,
             } => {
                 let args = self.eval_list(args)?;
-
+                let method_scope = self.child_scoped_no_var();
                 let s = self.get_current_scope_mut().with_var_mut(&var_name, |var| {
-                    match var.get_value_mut() {
-                        Value::Object(obj) => obj.call_method(&method_name, args),
-                        o => Err(RuntimeError::TypeError {
-                            actual_value: o.value_type(),
-                            expected_value: ValueType::Object,
-                        }),
-                    }
+                    var.get_value_mut()
+                        .invoke_method(&method_name, args, method_scope)
                 });
                 match s {
                     Some(v) => v,
@@ -180,30 +175,9 @@ impl Runtime {
                 var_name,
                 field_name,
             } => {
-                let x =
-                    self.get_current_scope()
-                        .with_var(&var_name, |var| match &var.get_value() {
-                            Value::Object(obj) => obj
-                                .get_field(&field_name)
-                                .map(|v| v.get_value().clone())
-                                .ok_or(RuntimeError::DoesNotExist(format!(
-                                    "field {field_name} in class {}",
-                                    obj.class().name()
-                                ))),
-                            //static variables
-                            Value::Class(class) => class
-                                .get_static_field(&field_name)
-                                .map(|s| s.to_value())
-                                .ok_or(RuntimeError::DoesNotExist(format!(
-                                    "static field {field_name} in class {}",
-                                    class.name()
-                                ))),
-
-                            v => Err(RuntimeError::TypeErrorMultiplePosibleValues {
-                                actual_value: v.value_type(),
-                                expected_values: vec![ValueType::Class, ValueType::Object],
-                            }),
-                        });
+                let x = self
+                    .get_current_scope()
+                    .with_var(&var_name, |var| var.get_value().get_field(&field_name));
 
                 match x.map(|r| r.map(Some)) {
                     Some(r) => r,
@@ -260,6 +234,46 @@ impl Runtime {
                 let right = self.eval(*right)?;
 
                 Ok(Some(Value::Bool(left == right)))
+            }
+            FnCallIntoOther { func, other } => {
+                fn eval_other_node(
+                    mut value: Value,
+                    other: Node,
+                    runtime: &mut Runtime,
+                ) -> RuntimeReturn {
+                    match other {
+                        Node::FnCall { name, arguments } => value.invoke_method(
+                            &name,
+                            runtime.eval_list(arguments)?,
+                            runtime.child_scoped_no_var(),
+                        ),
+                        Node::FnCallIntoOther { func, other } => {
+                            // let value = runtime.eval(*func)?.ok_or(RuntimeError::RequireValue)?;
+
+                            let value = eval_other_node(value, *func, runtime)?
+                                .ok_or(RuntimeError::RequireValue)?;
+                            eval_other_node(value, *other, runtime)
+                        }
+                        Node::VarRef(field_name) => value.get_field(&field_name).map(Some),
+                        MethodCall {
+                            var_name,
+                            method_name,
+                            args,
+                        } => {
+                            let mut field = value.get_field(&var_name)?;
+                            field.invoke_method(
+                                &method_name,
+                                runtime.eval_list(args)?,
+                                runtime.child_scoped_no_var(),
+                            )
+                        }
+                        _ => runtime.eval(other),
+                    }
+                }
+
+                let value = self.eval(*func)?.ok_or(RuntimeError::RequireValue)?;
+
+                eval_other_node(value, *other, self)
             }
             ClassDeclare { .. } | FnDeclare { .. } | Import(_) => Ok(None),
         }
@@ -517,6 +531,44 @@ impl Value {
             Self::Int(num) => Some(*num != 0),
 
             _ => None,
+        }
+    }
+    fn invoke_method(
+        &mut self,
+        method_name: &str,
+        args: Vec<Value>,
+        scope: Scope,
+    ) -> RuntimeReturn {
+        match self {
+            Value::Object(obj) => obj.call_method(method_name, args, scope),
+            o => Err(RuntimeError::TypeError {
+                actual_value: o.value_type(),
+                expected_value: ValueType::Object,
+            }),
+        }
+    }
+    fn get_field(&self, field_name: &str) -> Result<Value, RuntimeError> {
+        match self {
+            Value::Object(obj) => obj
+                .get_field(field_name)
+                .map(|v| v.get_value().clone())
+                .ok_or(RuntimeError::DoesNotExist(format!(
+                    "field {field_name} in class {}",
+                    obj.class().name()
+                ))),
+            //static variables
+            Value::Class(class) => class
+                .get_static_field(field_name)
+                .map(|s| s.to_value())
+                .ok_or(RuntimeError::DoesNotExist(format!(
+                    "static field {field_name} in class {}",
+                    class.name()
+                ))),
+
+            v => Err(RuntimeError::TypeErrorMultiplePosibleValues {
+                actual_value: v.value_type(),
+                expected_values: vec![ValueType::Class, ValueType::Object],
+            }),
         }
     }
 }

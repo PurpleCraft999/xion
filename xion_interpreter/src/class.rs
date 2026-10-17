@@ -144,11 +144,11 @@ pub struct RuntimeClassInstance {
     fields: HashMap<String, Variable>,
 }
 impl RuntimeClassInstance {
-    pub fn call_method(&mut self, name: &str, args: Vec<Value>) -> RuntimeReturn {
+    pub fn call_method(&mut self, name: &str, args: Vec<Value>, scope: Scope) -> RuntimeReturn {
         let Some(method) = self.class.methods.get(name) else {
             return Err(RuntimeError::DoesNotExist(name.to_owned()));
         };
-        let mut scope = Scope::new(self.class.name().to_string());
+        let mut scope = Scope::with_parent(scope);
         scope.variables = std::mem::take(&mut self.fields);
         let scope = Arc::new(Mutex::new(scope));
 
@@ -266,9 +266,12 @@ pub enum ClassInstance {
     Native(Arc<Mutex<dyn NativeClassInstance>>),
 }
 impl ClassInstance {
-    pub fn call_method(&self, method_name: &str, args: Vec<Value>) -> RuntimeReturn {
+    pub fn call_method(&self, method_name: &str, args: Vec<Value>, scope: Scope) -> RuntimeReturn {
         match self {
-            Self::Runtime(r) => r.lock().expect("panicking").call_method(method_name, args),
+            Self::Runtime(r) => r
+                .lock()
+                .expect("panicking")
+                .call_method(method_name, args, scope),
             Self::Native(n) => n.lock().expect("panicking").call_method(method_name, args),
         }
     }

@@ -27,10 +27,14 @@ pub fn parse_and_lex_file(path: impl AsRef<Path>) -> Vec<ast::Node> {
 }
 
 pub fn parse_and_lex(code: &str) -> Vec<ast::Node> {
+    #[cfg(test)]
+    {
+        test_log::init_logger();
+    }
+
     let lexer = token::Lexer::new(code);
-    let mut lexed = lexer.lex();
-    lexed.retain(|s| s != &crate::token::Token::WhiteSpace);
+    let lexed = lexer.lex();
     log::debug!("lexed: {:?}", lexed);
     let ast = ast::AstBuilder::new(lexed);
-    ast.build()
+    ast.build().expect("valid ast")
 }

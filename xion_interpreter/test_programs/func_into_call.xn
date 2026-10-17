@@ -1,0 +1,16 @@
+
+
+
+class T{
+    let i = 0;
+    fn s(){
+        return T();
+    }
+    fn test(){
+        print("works");
+    }
+}
+
+
+T().s().test();
+print(T().i);

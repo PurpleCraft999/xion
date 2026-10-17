@@ -7,7 +7,6 @@ while loops
 for loops
 conversion functions for types
 
-native class methods,constructor,
 
 
 function call into method_call. eg return_string().len();

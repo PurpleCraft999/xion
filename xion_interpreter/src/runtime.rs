@@ -543,6 +543,9 @@ pub trait FromValue {
     where
         Self: Sized;
 }
+pub trait ToVariable {
+    fn to_variable(self) -> Variable;
+}
 
 impl From<Arc<dyn NativeClass>> for Value {
     fn from(value: Arc<dyn NativeClass>) -> Self {

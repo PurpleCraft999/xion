@@ -70,7 +70,7 @@ pub fn lib(_attr: TokenStream, stream: TokenStream) -> TokenStream {
         use crate::{
             functions::NativeFunction,
             class::{NativeClass, NativeClassInstance, Static},
-            runtime::{FromValue, RuntimeError, Variable},
+            runtime::{FromValue, RuntimeError, Variable, ToVariable},
             Value,
         };
     )));
@@ -469,7 +469,15 @@ pub fn native_class(stream: TokenStream) -> TokenStream {
 
     let obj_create_field_values = fields
         .iter()
-        .map(|(name, _, _)| quote! {let #name = self.#name.to_owned();})
+        .map(|(name, ty, _)| { let name_str = name.to_string(); quote! {let #name = #ty::from_value(vars.get(#name_str).expect(&(#name_str.to_string()+" must be present")).clone().to_value())?;}})
+        .collect::<Vec<_>>();
+
+    let field_hashmap = fields
+        .iter()
+        .map(|(name, _, _)| {
+            let name_str = name.to_string();
+            quote! {(#name_str.to_string(),self.#name.to_owned().to_variable())}
+        })
         .collect::<Vec<_>>();
 
     quote! {
@@ -486,10 +494,19 @@ pub fn native_class(stream: TokenStream) -> TokenStream {
             }
         }
         impl NativeClass for #class_name{
-            fn instantiate(&self,this:Arc<dyn NativeClass>,values:Vec<Value>)->Result<Arc<std::sync::Mutex<dyn NativeClassInstance>>,RuntimeError>{
+            fn instantiate(
+                &self,
+                this: Arc<dyn NativeClass>,
+                values: Vec<crate::ast::Node>,
+                scope:crate::runtime::Scope,
+            ) -> Result<Arc<std::sync::Mutex<dyn NativeClassInstance>>, RuntimeError>{
 
+                // #(#obj_create_field_values)*
+
+                let mut run = crate::class::instantiate_inner(scope,&crate::class::ClassPath::new("native".to_string(),Self::Name.to_string()),values,std::collections::HashMap::from_iter([#(#field_hashmap),*]));
+                let _ = run.run()?;
+                let vars = &run.get_current_scope().variables;
                 #(#obj_create_field_values)*
-
                 Ok(Arc::new(std::sync::Mutex::new(#obj_struct_name{#(#obj_fields_name),*,class:this })) as Arc<std::sync::Mutex<dyn NativeClassInstance>>)
 
             }
@@ -789,6 +806,13 @@ pub fn value_helper(attr: TokenStream, item: TokenStream) -> TokenStream {
                             _ => Err(RuntimeError::TypeError{actual_value:value.value_type(),expected_value:ValueType::#variant_ident}),
                         }
                     }
+                }
+                impl ToVariable for #ty{
+                    fn to_variable(self)->Variable{
+                        Variable::new(#enum_name::#variant_ident(self))
+                    }
+
+
                 }
 
             });

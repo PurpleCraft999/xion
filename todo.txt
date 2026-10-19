@@ -7,7 +7,6 @@ while loops
 for loops
 conversion functions for types
 
-
 static methods
 
 Make toml for imports instead

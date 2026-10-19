@@ -1,6 +1,4 @@
 
-
-
 class T{
     let i = 0;
     fn s(){
@@ -10,7 +8,6 @@ class T{
         print("works");
     }
 }
+Test().name="hello";
 
 
-T().s().test();
-print(T().i);

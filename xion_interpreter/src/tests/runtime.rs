@@ -1,4 +1,4 @@
-use crate::ast::{AstBuilder, VariableAttributes};
+use crate::ast::VariableAttributes;
 
 use super::*;
 

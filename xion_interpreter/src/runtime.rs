@@ -192,20 +192,14 @@ impl Runtime {
                 new_value,
             } => {
                 let new_value = self.eval(*new_value)?.ok_or(RuntimeError::RequireValue)?;
-                self.get_current_scope_mut().with_var_mut(&var_name, |var| {
-                    match var.get_value_mut() {
-                        Value::Object(obj) => obj.get_field_mut(&field_name, |v| {
-                            *v.get_value_mut() = new_value;
-                        }),
-                        e => {
-                            error!(
-                                "tried to reassigned field {field_name} on {}",
-                                e.value_type()
-                            );
-                        }
-                    }
+                let error = self.get_current_scope_mut().with_var_mut(&var_name, |var| {
+                    var.get_value_mut().reassign_field(&field_name, new_value)
                 });
-                Ok(None)
+                if let Some(Err(e)) = error {
+                    Err(e)
+                } else {
+                    Ok(None)
+                }
             }
             If { condition, body } => {
                 let condition = self.eval(*condition)?.ok_or(RuntimeError::RequireValue)?;
@@ -235,26 +229,34 @@ impl Runtime {
 
                 Ok(Some(Value::Bool(left == right)))
             }
-            FnCallIntoOther { func, other } => {
+            FnCallChain { func, other } => {
                 fn eval_other_node(
                     mut value: Value,
                     other: Node,
                     runtime: &mut Runtime,
                 ) -> RuntimeReturn {
                     match other {
-                        Node::FnCall { name, arguments } => value.invoke_method(
+                        FnCall { name, arguments } => value.invoke_method(
                             &name,
                             runtime.eval_list(arguments)?,
                             runtime.child_scoped_no_var(),
                         ),
-                        Node::FnCallIntoOther { func, other } => {
+                        FnCallChain { func, other } => {
                             // let value = runtime.eval(*func)?.ok_or(RuntimeError::RequireValue)?;
 
                             let value = eval_other_node(value, *func, runtime)?
                                 .ok_or(RuntimeError::RequireValue)?;
                             eval_other_node(value, *other, runtime)
                         }
-                        Node::VarRef(field_name) => value.get_field(&field_name).map(Some),
+                        VarRef(field_name) => value.get_field(&field_name).map(Some),
+                        VarReasign { name, new_value } => value
+                            .reassign_field(
+                                &name,
+                                runtime
+                                    .eval(*new_value)?
+                                    .ok_or(RuntimeError::RequireValue)?,
+                            )
+                            .map(|_| None),
                         MethodCall {
                             var_name,
                             method_name,
@@ -569,6 +571,26 @@ impl Value {
                 actual_value: v.value_type(),
                 expected_values: vec![ValueType::Class, ValueType::Object],
             }),
+        }
+    }
+    fn reassign_field(&mut self, field_name: &str, new_value: Value) -> Result<(), RuntimeError> {
+        match self {
+            Value::Object(obj) => {
+                obj.get_field_mut(field_name, |v| {
+                    *v.get_value_mut() = new_value;
+                });
+                Ok(())
+            }
+            e => {
+                error!(
+                    "tried to reassigned field \"{field_name}\" on {}",
+                    e.value_type()
+                );
+                Err(RuntimeError::TypeError {
+                    actual_value: e.value_type(),
+                    expected_value: ValueType::Object,
+                })
+            }
         }
     }
 }

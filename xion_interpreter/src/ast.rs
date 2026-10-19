@@ -233,7 +233,7 @@ impl AstBuilder {
                     self.next()?;
                     let name = self.next_if_name()?;
                     let node = self.parse_name(name)?;
-                    Ok(Node::FnCallIntoOther {
+                    Ok(Node::FnCallChain {
                         func: Box::new(call),
                         other: Box::new(node),
                     })
@@ -361,7 +361,7 @@ pub enum Node {
         name: String,
         arguments: Vec<Node>,
     },
-    FnCallIntoOther {
+    FnCallChain {
         func: Box<Node>,
         other: Box<Node>,
     },

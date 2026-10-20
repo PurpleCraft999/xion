@@ -7,6 +7,8 @@ pub mod runtime;
 pub mod token;
 mod xion_std;
 pub use runtime::Value;
+
+use crate::ast::Ast;
 #[cfg(test)]
 mod test_log {
     use std::sync::Once;
@@ -21,12 +23,12 @@ mod test_log {
         });
     }
 }
-pub fn parse_and_lex_file(path: impl AsRef<Path>) -> Vec<ast::Node> {
+pub fn parse_and_lex_file(path: impl AsRef<Path>) -> Ast {
     let file = std::fs::read_to_string(path).unwrap();
     parse_and_lex(&file)
 }
 
-pub fn parse_and_lex(code: &str) -> Vec<ast::Node> {
+pub fn parse_and_lex(code: &str) -> Ast {
     #[cfg(test)]
     {
         test_log::init_logger();

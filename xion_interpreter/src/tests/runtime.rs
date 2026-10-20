@@ -20,10 +20,10 @@ macro_rules! run {
         run($nodes).1
     };
     (parse:$p:tt) => {
-        run(parse_and_lex($p)).0
+        run(parse_and_lex($p).nodes).0
     };
     (parse:$p:tt;Runtime) => {
-        run(parse_and_lex($p)).1
+        run(parse_and_lex($p).nodes).1
     };
 }
 

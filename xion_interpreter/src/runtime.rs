@@ -974,7 +974,7 @@ impl Scope {
 
 pub fn make_module(name: &str) -> Result<Scope, RuntimeError> {
     fn parse_file(path: &Path) -> Result<Scope, RuntimeError> {
-        let nodes = parse_and_lex_file(path);
+        let nodes = parse_and_lex_file(path).nodes;
         let mut run =
             Runtime::with_scope_and_nodes(nodes, Scope::new(path.to_string_lossy().to_string()));
         run.run()?;

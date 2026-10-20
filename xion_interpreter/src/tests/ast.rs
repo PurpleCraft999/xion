@@ -12,7 +12,7 @@ const FALSE: Token = Token::BoolLiteral(false);
 
 fn ast(vec: Vec<Token>) -> Vec<Node> {
     crate::test_log::init_logger();
-    AstBuilder::new(vec).build().expect("valid ast")
+    AstBuilder::new(vec).build().expect("valid ast").nodes
 }
 #[allow(non_snake_case)]
 fn Name(name: &str) -> Token {

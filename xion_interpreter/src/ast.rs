@@ -7,6 +7,7 @@ use crate::token::Token::{self, *};
 pub struct AstBuilder {
     tokens: Peekable<std::vec::IntoIter<Token>>,
     tree: Vec<Node>,
+    metadata: Vec<AstMetadata>,
     ///starts at 1
     line: u32,
     ///starts at 0
@@ -18,6 +19,7 @@ impl AstBuilder {
         Self {
             tokens: tokens.into_iter().peekable(),
             tree: Vec::new(),
+            metadata: Vec::new(),
             line: 1,
             current_char: 0,
         }
@@ -102,7 +104,7 @@ impl AstBuilder {
         E: Into<Option<Token>>,
         Option<&'expr Token>: From<&'expr E>,
     {
-        self.current_char += token.span();
+        let span = token.span();
         let node: Result<Node, AstError> = match token {
             NumberLiteral(_) | Name(_) | StringLiteral(_) | LeftParen | Minus | BoolLiteral(_) => {
                 pratt_parser::parse_expression(self, 0, token, end_token.into())
@@ -137,8 +139,9 @@ impl AstBuilder {
                 ))
             }
         };
+
         let end_token: Option<&Token> = end_token.into();
-        if let Some(end_token) = end_token
+        let end = if let Some(end_token) = end_token
             && self.peek() == Some(end_token)
         {
             self.next()?;
@@ -156,7 +159,17 @@ impl AstBuilder {
                 line: self.line,
                 char: self.current_char,
             })
+        };
+
+        if end.is_ok() {
+            self.metadata.push(AstMetadata {
+                line: self.line,
+                char: self.current_char,
+            });
         }
+
+        self.current_char += span;
+        end
     }
 
     fn parse_sequence_of_exprs(
@@ -337,7 +350,7 @@ impl AstBuilder {
         }
     }
 
-    pub fn build(mut self) -> Result<Vec<Node>, AstError> {
+    pub fn build(mut self) -> Result<Ast, AstError> {
         while let Some(token) = self.peek() {
             let node = match token {
                 Class => self.parse_class(),
@@ -363,7 +376,10 @@ impl AstBuilder {
             debug!("ast: {:?}", self.tree);
         }
 
-        Ok(self.tree)
+        Ok(Ast {
+            nodes: self.tree,
+            metadata: self.metadata,
+        })
     }
 }
 #[derive(Debug)]
@@ -400,6 +416,16 @@ impl AstError {
 pub enum SyntaxError {
     // NoName,
     InvalidFloat,
+}
+#[allow(unused)]
+pub struct AstMetadata {
+    line: u32,
+    char: u32,
+}
+#[allow(unused)]
+pub struct Ast {
+    pub nodes: Vec<Node>,
+    metadata: Vec<AstMetadata>,
 }
 
 #[derive(Debug, Clone)]

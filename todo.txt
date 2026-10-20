@@ -6,6 +6,8 @@ consider merging two arrays with +
 while loops
 for loops
 conversion functions for types
+lines and chars for runtime errors
+
 
 static methods
 

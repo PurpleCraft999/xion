@@ -30,7 +30,7 @@ fn main() {
     let nodes = xion_interpreter::parse_and_lex_file(&path);
     debug!("running main");
 
-    let mut runtime = match Runtime::main(nodes) {
+    let mut runtime = match Runtime::main(nodes.nodes) {
         Ok(r) => r,
         Err(e) => {
             error!(target:"main", "{e}");

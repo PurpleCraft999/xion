@@ -108,7 +108,7 @@ impl<'a> Lexer<'a> {
 }
 
 const fn is_whitespace(c: char) -> bool {
-    c == ' ' || c == '\n' || c == '\t'
+    c == ' ' || c == '\t'
 }
 
 ///turns unicode chars into the value
@@ -118,8 +118,8 @@ fn escape(s: String) -> String {
 }
 
 fn is_name(name: &str) -> bool {
-    !name.starts_with(|c: char| c.is_numeric())
-        && name.chars().all(|c| c.is_alphanumeric() || c == '_')
+    name.starts_with(|c: char| c.is_ascii_alphabetic())
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 #[derive(Debug, PartialEq)]
@@ -135,6 +135,7 @@ pub enum Token {
     Fn,
     Return,
     WhiteSpace,
+    NewLine,
     Comma,
     Equals,
     EOF,
@@ -194,6 +195,7 @@ impl Token {
             '*' => Asterisk,
             '/' => Division,
             '.' => Dot,
+            '\n' => NewLine,
             whitespace if is_whitespace(whitespace) => WhiteSpace,
             _ => return None,
         };
@@ -211,6 +213,26 @@ impl Token {
     }
     pub fn is_math_sign(&self) -> bool {
         matches!(self, Plus | Minus | Asterisk)
+    }
+    pub fn span(&self) -> u32 {
+        match self {
+            EOF => 0,
+            LeftBrace | RightBrace | LeftBracket | RightBracket | SemiColon | Colon | Comma
+            | Equals | LeftParen | RightParen | Plus | Minus | Asterisk | Division | Dot
+            | NewLine | WhiteSpace => 1,
+            Fn | If | IsEq => 2,
+            Let => 3,
+            BoolLiteral(true) | Null => 4,
+            BoolLiteral(false) | Class => 5,
+            Static | Return | Import => 6,
+            //i guess technicly we should check if len is higher than u32::Max for all three of these
+            Name(name) => name.len() as u32,
+            //two is added to the length because of quotes
+            //use chars().count() because string length is in bytes not chars
+            StringLiteral(str_lit) => str_lit.chars().count() as u32 + 2,
+            //string length is fine becuase 0..9 is all ascii
+            NumberLiteral(int) => int.to_string().len() as u32,
+        }
     }
 }
 

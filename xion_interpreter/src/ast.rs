@@ -7,6 +7,10 @@ use crate::token::Token::{self, *};
 pub struct AstBuilder {
     tokens: Peekable<std::vec::IntoIter<Token>>,
     tree: Vec<Node>,
+    ///starts at 1
+    line: u32,
+    ///starts at 0
+    current_char: u32,
 }
 impl AstBuilder {
     pub fn new(mut tokens: Vec<Token>) -> Self {
@@ -14,6 +18,8 @@ impl AstBuilder {
         Self {
             tokens: tokens.into_iter().peekable(),
             tree: Vec::new(),
+            line: 1,
+            current_char: 0,
         }
     }
 
@@ -33,7 +39,12 @@ impl AstBuilder {
         if let Name(name) = token {
             Ok(name)
         } else {
-            Err(AstError::unexpeced_token("Name", token))
+            Err(AstError::unexpeced_token(
+                "Name",
+                token,
+                self.line,
+                self.current_char,
+            ))
         }
     }
     fn next(&mut self) -> Result<Token, AstError> {
@@ -45,7 +56,12 @@ impl AstBuilder {
 
         if self.peek() != Some(&LeftBrace) {
             error!("next token was not left brace");
-            return Err(AstError::unexpeced_token("{", self.next()?));
+            return Err(AstError::unexpeced_token(
+                "{",
+                self.next()?,
+                self.line,
+                self.current_char,
+            ));
         }
 
         let body = self.parse_sequence_of_exprs(LeftBrace, RightBrace, SemiColon)?;
@@ -66,7 +82,12 @@ impl AstBuilder {
         let name = self.next_if_name()?;
         if !self.consume_if(|t| t == &Equals) {
             error!("not equals after var name");
-            return Err(AstError::unexpeced_token("=", self.next()?));
+            return Err(AstError::unexpeced_token(
+                "=",
+                self.next()?,
+                self.line,
+                self.current_char,
+            ));
         }
         let value = self.parse_next_expr(&SemiColon)?;
 
@@ -81,6 +102,7 @@ impl AstBuilder {
         E: Into<Option<Token>>,
         Option<&'expr Token>: From<&'expr E>,
     {
+        self.current_char += token.span();
         let node: Result<Node, AstError> = match token {
             NumberLiteral(_) | Name(_) | StringLiteral(_) | LeftParen | Minus | BoolLiteral(_) => {
                 pratt_parser::parse_expression(self, 0, token, end_token.into())
@@ -97,6 +119,12 @@ impl AstBuilder {
             LeftBracket => self.parse_array(),
             Let => self.parse_var_declare(),
             Fn => self.parse_function(),
+            //newline increase line counter and reset char counter
+            NewLine => {
+                self.current_char = 0;
+                self.line += 1;
+                return Ok(Node::NewLine);
+            }
             LeftBrace | RightBrace | RightParen | SemiColon | Comma | Colon | WhiteSpace
             | Equals | EOF | Class | Plus | Asterisk | RightBracket | Division | Dot | IsEq
             | Static | Null => {
@@ -104,6 +132,8 @@ impl AstBuilder {
                 Err(AstError::unexpeced_token(
                     "Number,name,string,bool,return,import,if,let,fn,-,[,(,",
                     token,
+                    self.line,
+                    self.current_char,
                 ))
             }
         };
@@ -122,7 +152,10 @@ impl AstBuilder {
                 "No end was specified".to_string()
             };
             error!("no {end} after expresion {node:?}");
-            Err(AstError::InvalidExprEnd)
+            Err(AstError::InvalidExprEnd {
+                line: self.line,
+                char: self.current_char,
+            })
         }
     }
 
@@ -191,7 +224,12 @@ impl AstBuilder {
         let name = self.next_if_name()?;
         if !self.consume_if(|t| t == &LeftParen) {
             error!("no left paren after function name");
-            return Err(AstError::unexpeced_token("(", self.next()?));
+            return Err(AstError::unexpeced_token(
+                "(",
+                self.next()?,
+                self.line,
+                self.current_char,
+            ));
         }
         let mut params = Vec::new();
 
@@ -319,16 +357,30 @@ impl AstBuilder {
 }
 #[derive(Debug)]
 pub enum AstError {
-    InvalidExprEnd,
-    UnexpectedToken { expected: String, found: Token },
+    InvalidExprEnd {
+        line: u32,
+        char: u32,
+    },
+    UnexpectedToken {
+        expected: String,
+        found: Token,
+        line: u32,
+        char: u32,
+    },
     NoNextToken,
-    SyntaxError { _kind: SyntaxError },
+    SyntaxError {
+        _kind: SyntaxError,
+        line: u32,
+        char: u32,
+    },
 }
 impl AstError {
-    fn unexpeced_token(expected: &str, found: Token) -> Self {
+    fn unexpeced_token(expected: &str, found: Token, line: u32, char: u32) -> Self {
         Self::UnexpectedToken {
             expected: expected.to_string(),
             found,
+            line,
+            char,
         }
     }
 }
@@ -407,6 +459,7 @@ pub enum Node {
     },
     FloatLiteral(f64),
     Null,
+    NewLine,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 #[non_exhaustive]
@@ -463,7 +516,12 @@ mod pratt_parser {
                 let lhs = parse_expression(lexer, 0, next, end_token);
                 if !lexer.consume_if(|t| t == &Token::RightParen) {
                     error!("no closing paran");
-                    return Err(AstError::unexpeced_token(")", lexer.next()?));
+                    return Err(AstError::unexpeced_token(
+                        ")",
+                        lexer.next()?,
+                        lexer.line,
+                        lexer.current_char,
+                    ));
                 }
                 lhs?
             }
@@ -484,10 +542,15 @@ mod pratt_parser {
                         Node::FloatLiteral(format!("{num}.{frac}").parse::<f64>().map_err(
                             |_| AstError::SyntaxError {
                                 _kind: super::SyntaxError::InvalidFloat,
+                                line: lexer.line,
+                                char: lexer.current_char,
                             },
                         )?)
                     } else {
-                        return Err(AstError::InvalidExprEnd);
+                        return Err(AstError::InvalidExprEnd {
+                            line: lexer.line,
+                            char: lexer.current_char,
+                        });
                     }
                 } else {
                     Node::NumberLiteral(num)
@@ -501,7 +564,14 @@ mod pratt_parser {
                     lexer.next()?;
                     Node::NumberLiteral(num)
                 }
-                _ => return Err(AstError::unexpeced_token("-", lexer.next()?)),
+                _ => {
+                    return Err(AstError::unexpeced_token(
+                        "-",
+                        lexer.next()?,
+                        lexer.line,
+                        lexer.current_char,
+                    ));
+                }
             },
 
             t => {
@@ -509,6 +579,8 @@ mod pratt_parser {
                 return Err(AstError::unexpeced_token(
                     "Name,null,Number,bool,String,-,(",
                     t,
+                    lexer.line,
+                    lexer.current_char,
                 ));
             }
         };
@@ -544,6 +616,8 @@ mod pratt_parser {
                     return Err(AstError::unexpeced_token(
                         "+,-,*,/,==,),},;,','",
                         lexer.next()?,
+                        lexer.line,
+                        lexer.current_char,
                     ));
                     // break;
                 }

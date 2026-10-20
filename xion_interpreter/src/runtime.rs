@@ -277,6 +277,7 @@ impl Runtime {
 
                 eval_other_node(value, *other, self)
             }
+            NewLine => Ok(None),
             ClassDeclare { .. } | FnDeclare { .. } | Import(_) => Ok(None),
         }
     }

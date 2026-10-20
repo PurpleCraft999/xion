@@ -299,7 +299,7 @@ impl AstBuilder {
                 self.next()?;
                 let accessed_name = self.next_if_name()?;
                 let peeked = self.peek();
-                match peeked {
+                let next = match peeked {
                     Some(LeftParen) => {
                         let args = self.parse_args()?;
                         Ok(Node::MethodCall {
@@ -320,6 +320,17 @@ impl AstBuilder {
                         var_name: name,
                         field_name: accessed_name,
                     }),
+                };
+                if self.peek() == Some(&Dot) {
+                    self.next()?;
+                    let next_name = self.next_if_name()?;
+                    let node = self.parse_name(next_name)?;
+                    Ok(Node::FnCallChain {
+                        func: Box::new(next?),
+                        other: Box::new(node),
+                    })
+                } else {
+                    next
                 }
             }
             _ => Ok(Node::VarRef(name)),

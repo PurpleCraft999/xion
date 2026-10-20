@@ -1,6 +1,6 @@
-
 class T{
     let i = 0;
+    let static Me = T();
     fn s(){
         return T();
     }
@@ -8,6 +8,8 @@ class T{
         print("works");
     }
 }
-Test().name="hello";
+print("original "+T.Me.i);
+T.Me.i=1;
+print("altered "+T.Me.i);
 
 

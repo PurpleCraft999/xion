@@ -229,7 +229,7 @@ impl Runtime {
 
                 Ok(Some(Value::Bool(left == right)))
             }
-            CallChain { func, other } => {
+            CallChain { item: func, other } => {
                 fn eval_other_node(
                     mut value: Value,
                     other: Node,
@@ -241,7 +241,7 @@ impl Runtime {
                             runtime.eval_list(arguments)?,
                             runtime.child_scoped_no_var(),
                         ),
-                        CallChain { func, other } => {
+                        CallChain { item: func, other } => {
                             // let value = runtime.eval(*func)?.ok_or(RuntimeError::RequireValue)?;
 
                             let value = eval_other_node(value, *func, runtime)?

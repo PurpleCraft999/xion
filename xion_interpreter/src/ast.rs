@@ -285,7 +285,7 @@ impl AstBuilder {
                     let name = self.next_if_name()?;
                     let node = self.parse_name(name)?;
                     Ok(Node::CallChain {
-                        func: Box::new(call),
+                        item: Box::new(call),
                         other: Box::new(node),
                     })
                 } else {
@@ -339,7 +339,7 @@ impl AstBuilder {
                     let next_name = self.next_if_name()?;
                     let node = self.parse_name(next_name)?;
                     Ok(Node::CallChain {
-                        func: Box::new(next?),
+                        item: Box::new(next?),
                         other: Box::new(node),
                     })
                 } else {
@@ -451,7 +451,7 @@ pub enum Node {
         arguments: Vec<Node>,
     },
     CallChain {
-        func: Box<Node>,
+        item: Box<Node>,
         other: Box<Node>,
     },
     VarReasign {
@@ -603,7 +603,7 @@ mod pratt_parser {
                         let name = lexer.parse_name(name)?;
 
                         Node::CallChain {
-                            func: Box::new(string),
+                            item: Box::new(string),
                             other: Box::new(name),
                         }
                     } else {

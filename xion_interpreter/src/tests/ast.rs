@@ -372,7 +372,7 @@ fn func_call_into_call() {
     ]);
     assert_eq!(
         vec![Node::CallChain {
-            func: Box::new(Node::FnCall {
+            item: Box::new(Node::FnCall {
                 name: "test_fn".to_string(),
                 arguments: vec![]
             }),
@@ -396,7 +396,7 @@ fn func_call_into_field_access() {
     ]);
     assert_eq!(
         vec![Node::CallChain {
-            func: Box::new(Node::FnCall {
+            item: Box::new(Node::FnCall {
                 name: "test_fn".to_string(),
                 arguments: vec![]
             }),
@@ -404,4 +404,26 @@ fn func_call_into_field_access() {
         }],
         ast
     );
+}
+
+#[test]
+fn calling_str_func() {
+    let ast = ast(vec![
+        Token::StringLiteral("hello".to_string()),
+        Dot,
+        Name("len"),
+        LeftParen,
+        RightParen,
+        SemiColon,
+    ]);
+    assert_eq!(
+        vec![Node::CallChain {
+            item: Box::new(StringLiteral("hello".to_string())),
+            other: Box::new(Node::FnCall {
+                name: "len".to_string(),
+                arguments: vec![]
+            })
+        }],
+        ast
+    )
 }

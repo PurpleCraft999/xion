@@ -605,3 +605,9 @@ fn field_access_into_func_call() {
     let run = run!(parse:"class Yet{fn c(){return 0;}}   class Not{let yet = Yet();} return Not().yet.c();");
     assert_eq!(Ok(Some(Value::Int(0))), run)
 }
+
+#[test]
+fn call_string_method() {
+    let run = run!(parse:r#"return "hello".len();"#);
+    assert_eq!(Ok(Some(Value::Int(5))), run)
+}

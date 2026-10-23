@@ -111,6 +111,22 @@ mod time {
         }
     }
 }
+mod imports {
+    pub use crate::Value;
+    pub use crate::functions::NativeFunction;
+    pub use crate::runtime::FromValue;
+    pub use crate::runtime::RuntimeError;
+    pub use xion_interpreter_proc_macros::native_function;
+}
+
+pub mod string {
+    use super::imports::*;
+
+    #[native_function]
+    pub fn len(string: String) -> i64 {
+        string.len() as i64
+    }
+}
 
 pub use stdlib::get_std_lib;
 

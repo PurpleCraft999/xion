@@ -229,7 +229,7 @@ impl Runtime {
 
                 Ok(Some(Value::Bool(left == right)))
             }
-            FnCallChain { func, other } => {
+            CallChain { func, other } => {
                 fn eval_other_node(
                     mut value: Value,
                     other: Node,
@@ -241,7 +241,7 @@ impl Runtime {
                             runtime.eval_list(arguments)?,
                             runtime.child_scoped_no_var(),
                         ),
-                        FnCallChain { func, other } => {
+                        CallChain { func, other } => {
                             // let value = runtime.eval(*func)?.ok_or(RuntimeError::RequireValue)?;
 
                             let value = eval_other_node(value, *func, runtime)?
@@ -544,6 +544,20 @@ impl Value {
     ) -> RuntimeReturn {
         match self {
             Value::Object(obj) => obj.call_method(method_name, args, scope),
+            Value::String(str) => {
+                let args = {
+                    let mut base = vec![Value::from(str.clone())];
+                    base.extend(args);
+                    base
+                };
+
+                match method_name {
+                    "len" => xion_std::string::LenFn.call(args),
+                    _ => Err(RuntimeError::DoesNotExist(format!(
+                        "method {method_name} does not exist for string"
+                    ))),
+                }
+            }
             o => Err(RuntimeError::TypeError {
                 actual_value: o.value_type(),
                 expected_value: ValueType::Object,

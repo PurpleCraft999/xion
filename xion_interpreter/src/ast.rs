@@ -284,7 +284,7 @@ impl AstBuilder {
                     self.next()?;
                     let name = self.next_if_name()?;
                     let node = self.parse_name(name)?;
-                    Ok(Node::FnCallChain {
+                    Ok(Node::CallChain {
                         func: Box::new(call),
                         other: Box::new(node),
                     })
@@ -338,7 +338,7 @@ impl AstBuilder {
                     self.next()?;
                     let next_name = self.next_if_name()?;
                     let node = self.parse_name(next_name)?;
-                    Ok(Node::FnCallChain {
+                    Ok(Node::CallChain {
                         func: Box::new(next?),
                         other: Box::new(node),
                     })
@@ -450,7 +450,7 @@ pub enum Node {
         name: String,
         arguments: Vec<Node>,
     },
-    FnCallChain {
+    CallChain {
         func: Box<Node>,
         other: Box<Node>,
     },
@@ -594,7 +594,30 @@ mod pratt_parser {
                 }
             }
             Token::BoolLiteral(b) => Node::BoolLiteral(b),
-            Token::StringLiteral(string) => Node::StringLiteral(string),
+            Token::StringLiteral(str) => {
+                let string = Node::StringLiteral(str);
+                if lexer.peek() == Some(&Token::Dot) {
+                    lexer.next()?;
+                    let next = lexer.next()?;
+                    if let Token::Name(name) = next {
+                        let name = lexer.parse_name(name)?;
+
+                        Node::CallChain {
+                            func: Box::new(string),
+                            other: Box::new(name),
+                        }
+                    } else {
+                        return Err(AstError::unexpeced_token(
+                            "Name",
+                            next,
+                            lexer.line,
+                            lexer.current_char,
+                        ));
+                    }
+                } else {
+                    string
+                }
+            }
             Token::Minus => match lexer.peek() {
                 Some(Token::NumberLiteral(num)) => {
                     let num = -*num;

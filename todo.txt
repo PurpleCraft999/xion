@@ -7,8 +7,8 @@ while loops
 for loops
 conversion functions for types
 lines and chars for runtime errors
-
-
+comparison and not
+methods for non objects
 static methods
 
 Make toml for imports instead

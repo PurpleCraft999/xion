@@ -371,7 +371,7 @@ fn func_call_into_call() {
         SemiColon,
     ]);
     assert_eq!(
-        vec![Node::FnCallChain {
+        vec![Node::CallChain {
             func: Box::new(Node::FnCall {
                 name: "test_fn".to_string(),
                 arguments: vec![]
@@ -395,7 +395,7 @@ fn func_call_into_field_access() {
         SemiColon,
     ]);
     assert_eq!(
-        vec![Node::FnCallChain {
+        vec![Node::CallChain {
             func: Box::new(Node::FnCall {
                 name: "test_fn".to_string(),
                 arguments: vec![]

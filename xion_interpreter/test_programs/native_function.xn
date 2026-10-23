@@ -8,3 +8,4 @@ import time;
 print(time());
 #print(sleep(1));
 #print(sleep(1.3));
+print("hello world".len());

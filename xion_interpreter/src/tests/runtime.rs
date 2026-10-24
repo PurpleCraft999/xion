@@ -653,5 +653,35 @@ fn return_empty() {
     let run = run!(parse:"return; let n=0;";Runtime);
     assert!(!run.current_scope.variables.contains_key("n"))
 }
+#[test]
+fn func_typed_params() {
+    let run = run!(parse:r#"
+        fn greet(name:String){
+            return name+"!";
+        }
+        return greet("john");
+    "#);
+    assert_eq!(Ok(Some(Value::String("john!".to_string()))), run)
+}
 
-fn func_typed_params() {}
+#[test]
+fn optinal_function_var() {
+    let run = run!(parse:r#"
+    fn greet(name:String,home_town:String?){
+        if home_town==null {
+            
+            
+            return "hi "+name;
+        }
+        return ("hi "+name+" from "+home_town);
+    }
+    let mary = greet("mary");
+    return mary+" and "+greet("john","kansas city");
+"#);
+    assert_eq!(
+        Ok(Some(Value::String(
+            "hi mary and hi john from kansas city".to_string()
+        ))),
+        run
+    )
+}

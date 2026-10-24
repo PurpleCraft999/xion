@@ -4,11 +4,17 @@ class Type{
     fn name(){return name;}
 
 }
-class N{
+fn greet(name:String,home_town:String?){
+    
 
+    if home_town==null {
+        print("hi "+name);
+        
+        return;
+    }
+    print("hi "+name+" from "+home_town);
 
-
-
+    
 }
 
 
@@ -22,9 +28,9 @@ hi=3;
 hi=true;
 hi="";
 hi=null;
-
-let num:int? = 0;
-
 let type:Type? = null;
-print(type);
+let num:int? = 0;
+greet("joe","new york");
+greet("amanda");
+
 

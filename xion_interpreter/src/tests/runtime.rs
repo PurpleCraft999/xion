@@ -182,7 +182,7 @@ fn test_array_literal_evaluation() {
 fn test_function_declare() {
     let nodes = vec![Node::FnDeclare {
         name: "my_func".to_string(),
-        parameters: vec!["a".to_string()],
+        parameters: vec![("a".to_string(), None, false)],
         body: vec![],
     }];
 
@@ -200,7 +200,7 @@ fn test_function_call() {
     let nodes = vec![
         Node::FnDeclare {
             name: "add_one".to_string(),
-            parameters: vec!["n".to_string()],
+            parameters: vec![("n".to_string(), None, false)],
             body: vec![Node::Return(Some(Box::new(Node::Math {
                 left: Box::new(Node::VarRef("n".to_string())),
                 op: MathSign::Plus,
@@ -459,7 +459,7 @@ fn test_method_call() {
                 },
                 Node::FnDeclare {
                     name: "deposit".to_string(),
-                    parameters: vec!["amount".to_string()],
+                    parameters: vec![("amount".to_string(), None, false)],
                     body: vec![Node::VarReasign {
                         name: "total".to_string(),
                         new_value: Box::new(VarRef("amount".to_string())),
@@ -647,3 +647,11 @@ fn var_typed_reassign_incorect_type() {
         })
     ))
 }
+
+#[test]
+fn return_empty() {
+    let run = run!(parse:"return; let n=0;";Runtime);
+    assert!(!run.current_scope.variables.contains_key("n"))
+}
+
+fn func_typed_params() {}

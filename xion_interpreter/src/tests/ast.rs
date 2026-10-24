@@ -131,7 +131,10 @@ fn fn_declaration() {
     assert_eq!(
         vec![Node::FnDeclare {
             name: "add".to_string(),
-            parameters: vec!["a".to_string(), "b".to_string()],
+            parameters: vec![
+                ("a".to_string(), None, false),
+                ("b".to_string(), None, false)
+            ],
             body: vec![Node::Return(Some(Box::new(Node::NumberLiteral(42))))],
         }],
         ast

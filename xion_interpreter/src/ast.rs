@@ -73,6 +73,23 @@ impl AstBuilder {
             body,
         })
     }
+    ///call when : should be next
+    /// returns type and if type is nullable
+    fn parse_var_type(&mut self) -> (Option<String>, bool) {
+        if self.consume_if(|t| t == &Colon) {
+            let name = if matches!(self.peek(), Some(Name(_))) {
+                self.next_if_name().ok()
+            } else {
+                None
+            };
+
+            let nullable = self.consume_if(|t| t == &Token::QuestionMark);
+
+            (name, nullable)
+        } else {
+            (None, false)
+        }
+    }
     fn parse_var_declare(&mut self) -> Result<Node, AstError> {
         self.consume_if(|t| t == &Let);
 
@@ -83,22 +100,8 @@ impl AstBuilder {
 
         let name = self.next_if_name()?;
         //parse type
-        let ty = if self.consume_if(|t| t == &Colon) {
-            let name = if matches!(self.peek(), Some(Name(_))) {
-                self.next_if_name().ok()
-            } else {
-                None
-            };
-
-            if self.consume_if(|t| t == &Token::QuestionMark) {
-                attrs.is_nullable = true;
-            }
-
-            name
-        } else {
-            None
-        };
-
+        let (ty, nullable) = self.parse_var_type();
+        attrs.is_nullable = nullable;
         if !self.consume_if(|t| t == &Equals) {
             error!("not equals after var name");
             return Err(AstError::unexpeced_token(
@@ -117,6 +120,15 @@ impl AstBuilder {
             value: Box::new(value),
         })
     }
+    fn parse_return(&mut self) -> Result<Node, AstError> {
+        let return_value = match self.peek() {
+            Some(SemiColon) => None,
+            _ => Some(self.parse_next_expr(&None)?),
+        }
+        .map(Box::new);
+        Ok(Node::Return(return_value))
+    }
+
     fn parse_expr<'expr, E>(&mut self, token: Token, end_token: &'expr E) -> Result<Node, AstError>
     where
         E: Into<Option<Token>>,
@@ -126,13 +138,7 @@ impl AstBuilder {
         let node: Result<Node, AstError> = match token {
             NumberLiteral(_) | Name(_) | StringLiteral(_) | LeftParen | Minus | BoolLiteral(_)
             | Null => pratt_parser::parse_expression(self, 0, token, end_token.into()),
-            Return => {
-                let return_value = self.parse_next_expr::<Option<Token>>(&None).map(Box::new);
-                match return_value {
-                    Ok(s) => Ok(Node::Return(Some(s))),
-                    Err(e) => Err(e),
-                }
-            }
+            Return => self.parse_return(),
             Import => self.parse_import(),
             If => self.parse_if_statement(),
             LeftBracket => self.parse_array(),
@@ -272,7 +278,8 @@ impl AstBuilder {
                 continue;
             }
             if let Name(param_name) = token {
-                params.push(param_name);
+                let (ty, nullable) = self.parse_var_type();
+                params.push((param_name, ty, nullable));
                 continue;
             }
             error!("unexpected token {:?} while parsing fn header", token);
@@ -479,7 +486,8 @@ pub enum Node {
 
     FnDeclare {
         name: String,
-        parameters: Vec<String>,
+        ///name type nullable
+        parameters: Vec<(String, Option<String>, bool)>,
         body: Vec<Node>,
     },
     Return(Option<Box<Node>>),

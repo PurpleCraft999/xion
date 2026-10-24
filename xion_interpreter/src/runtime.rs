@@ -61,39 +61,9 @@ impl Runtime {
                 r#type: ty,
                 value,
             } => {
-                let ty = if let Some(ty) = ty {
-                    match &ty[..] {
-                        "int" => VariableType::Int,
-                        "String" => VariableType::String,
-                        "float" => VariableType::Float,
-                        "bool" => VariableType::Bool,
-                        "Any" => VariableType::Any,
-                        "Class" => {
-                            VariableType::Class(self.get_current_scope().get_class(&ty).ok_or(
-                                RuntimeError::DoesNotExist(format!(
-                                    "variable {name} cannot have type {ty} because class {ty}"
-                                )),
-                            )?)
-                        }
-                        _ => VariableType::Object(self.get_current_scope().get_class(&ty).ok_or(
-                            RuntimeError::DoesNotExist(format!(
-                                "variable {name} cannot have type {ty} because class {ty}"
-                            )),
-                        )?),
-                    }
-                } else {
-                    VariableType::Any
-                };
+                let ty = self.parse_type(ty, &name)?;
 
                 let value = self.eval(*value)?.ok_or(RuntimeError::RequireValue)?;
-
-                // if value == Value::Null && !attributes.is_nullable() {
-                //     return Err(RuntimeError::VariableAssignTypeError {
-                //         expected_value: ty,
-                //         nullable: attributes.is_nullable(),
-                //         actual_value: value.value_type(),
-                //     });
-                // }
 
                 let var = Variable::with_attributes(value, ty, attributes)?;
                 self.get_current_scope_mut().add_var(name.clone(), var)?;
@@ -354,6 +324,34 @@ impl Runtime {
                 .map_err(|e| Other(format!("import error: {e}"))),
             _ => Ok(None),
         }
+    }
+    pub fn parse_type(
+        &self,
+        ty: Option<String>,
+        var_name: &str,
+    ) -> Result<VariableType, RuntimeError> {
+        let ty = if let Some(ty) = ty {
+            match &ty[..] {
+                "int" => VariableType::Int,
+                "String" => VariableType::String,
+                "float" => VariableType::Float,
+                "bool" => VariableType::Bool,
+                "Any" => VariableType::Any,
+                "Class" => VariableType::Class(self.get_current_scope().get_class(&ty).ok_or(
+                    RuntimeError::DoesNotExist(format!(
+                        "variable {var_name} cannot have type {ty} because class {ty}"
+                    )),
+                )?),
+                _ => VariableType::Object(self.get_current_scope().get_class(&ty).ok_or(
+                    RuntimeError::DoesNotExist(format!(
+                        "variable {var_name} cannot have type {ty} because class {ty}"
+                    )),
+                )?),
+            }
+        } else {
+            VariableType::Any
+        };
+        Ok(ty)
     }
     ///makes a child scope
     fn child_scope(&self) -> Scope {

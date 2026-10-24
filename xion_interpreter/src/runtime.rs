@@ -58,13 +58,37 @@ impl Runtime {
             VarDeclare {
                 attributes,
                 name,
+                r#type: ty,
                 value,
             } => {
-                // if attributes.is_static() {
-                //     self.get_current_scope_mut().add_static_var(name, var)
-                // } else {
+                let ty = if let Some(ty) = ty {
+                    match &ty[..] {
+                        "int" => VariableType::Int,
+                        "String" => VariableType::String,
+                        "float" => VariableType::Float,
+                        "bool" => VariableType::Bool,
+
+                        _ => VariableType::Object(self.get_current_scope().get_class(&ty).ok_or(
+                            RuntimeError::DoesNotExist(format!(
+                                "variable {name} cannot have type {ty} because class {ty}"
+                            )),
+                        )?),
+                    }
+                } else {
+                    VariableType::Any
+                };
+
                 let value = self.eval(*value)?.ok_or(RuntimeError::RequireValue)?;
-                let var = Variable::with_attributes(value, attributes);
+
+                if value == Value::Null && !attributes.is_nullable() {
+                    return Err(RuntimeError::VariableAssignTypeError {
+                        expected_value: ty,
+                        nullable: attributes.is_nullable(),
+                        actual_value: value.value_type(),
+                    });
+                }
+
+                let var = Variable::with_attributes(value, ty, attributes);
                 self.get_current_scope_mut().add_var(name.clone(), var)?;
 
                 Ok(None)
@@ -284,7 +308,9 @@ impl Runtime {
             } => {
                 let scope = self.child_scoped_no_var();
                 // scope.name=class_name.clone();
-                let (static_fields,body) = body.into_iter().partition(|t|matches!(t,Node::VarDeclare { attributes, name, value } if attributes.is_static()));
+                let (static_fields, body) = body.into_iter().partition(
+                    |t| matches!(t,Node::VarDeclare { attributes,.. } if attributes.is_static()),
+                );
 
                 let mut class_body = Runtime::with_scope_and_nodes(body, scope);
                 class_body.run()?;
@@ -911,7 +937,11 @@ impl Scope {
 
         self.add_var(
             class.name().to_string(),
-            Variable::with_attributes(Value::Class(class), VariableAttributes::attr_static()),
+            Variable::with_attributes(
+                Value::Class(class.clone()),
+                VariableType::Class(class.clone()),
+                VariableAttributes::attr_static(),
+            ),
         )?;
         Ok(())
     }
@@ -936,7 +966,11 @@ impl Scope {
 
             self.add_var(
                 class.name().to_string(),
-                Variable::with_attributes(Value::Class(class), VariableAttributes::attr_static()),
+                Variable::with_attributes(
+                    Value::Class(class.clone()),
+                    VariableType::Class(class),
+                    VariableAttributes::attr_static(),
+                ),
             )?;
             Ok(())
         } else {
@@ -1048,17 +1082,17 @@ pub struct Variable {
     attributes: VariableAttributes,
 }
 impl Variable {
-    pub fn new(value: Value) -> Self {
+    pub fn new(value: Value, ty: VariableType) -> Self {
         Self {
             value,
-            variable_type: VariableType::Nullable(VariableTypeNonNull::Any),
+            variable_type: ty,
             attributes: VariableAttributes::default(),
         }
     }
-    pub fn with_attributes(value: Value, attributes: VariableAttributes) -> Self {
+    pub fn with_attributes(value: Value, ty: VariableType, attributes: VariableAttributes) -> Self {
         Self {
             value,
-            variable_type: VariableType::Nullable(VariableTypeNonNull::Any),
+            variable_type: ty,
             attributes,
         }
     }
@@ -1070,13 +1104,16 @@ impl Variable {
         self.value
     }
     pub fn reassign_value(&mut self, new_value: Value) -> Result<(), RuntimeError> {
-        if self.variable_type.can_accept(&new_value) {
+        if self.variable_type.can_accept(&new_value)
+            || (self.attributes.is_nullable() && new_value == Value::Null)
+        {
             self.value = new_value;
             Ok(())
         } else {
-            Err(RuntimeError::TypeError {
+            Err(RuntimeError::VariableAssignTypeError {
+                expected_value: self.variable_type.clone(),
+                nullable: self.attributes.is_nullable(),
                 actual_value: new_value.value_type(),
-                expected_value: self.value_type(),
             })
         }
     }
@@ -1097,16 +1134,17 @@ impl PartialEq for Variable {
 
 #[derive(Debug, Clone, PartialEq)]
 #[allow(dead_code)]
-enum VariableTypeNonNull {
+pub enum VariableType {
     String,
     Int,
     Float,
     Object(Class),
+    Class(Class),
     Bool,
     Array,
     Any,
 }
-impl VariableTypeNonNull {
+impl VariableType {
     fn can_accept(&self, other: &Value) -> bool {
         match (self, other) {
             (Self::String, Value::String(_)) => true,
@@ -1115,6 +1153,7 @@ impl VariableTypeNonNull {
             (Self::Float, Value::Float(_)) => true,
             (Self::Int, Value::Int(_)) => true,
             (Self::Object(s), Value::Object(c)) => *s == c.class(),
+            (Self::Any, Value::Null) => false,
             (Self::Any, _) => true,
             _ => false,
         }
@@ -1126,20 +1165,20 @@ impl VariableTypeNonNull {
     // }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-#[allow(dead_code)]
-enum VariableType {
-    NonNull(VariableTypeNonNull),
-    Nullable(VariableTypeNonNull),
-}
-impl VariableType {
-    fn can_accept(&self, other: &Value) -> bool {
-        match self {
-            Self::Nullable(n) => n.can_accept(other) || other == &Value::Null,
-            Self::NonNull(n) => n.can_accept(other),
-        }
-    }
-}
+// #[derive(Debug, Clone, PartialEq)]
+// #[allow(dead_code)]
+// pub enum VariableType {
+//     NonNull(VariableTypeNonNull),
+//     Nullable(VariableTypeNonNull),
+// }
+// impl VariableType {
+//     fn can_accept(&self, other: &Value) -> bool {
+//         match self {
+//             Self::Nullable(n) => n.can_accept(other) || other == &Value::Null,
+//             Self::NonNull(n) => n.can_accept(other),
+//         }
+//     }
+// }
 
 #[derive(Debug, PartialEq)]
 pub enum RuntimeError {
@@ -1151,6 +1190,11 @@ pub enum RuntimeError {
     TypeError {
         actual_value: ValueType,
         expected_value: ValueType,
+    },
+    VariableAssignTypeError {
+        expected_value: VariableType,
+        nullable: bool,
+        actual_value: ValueType,
     },
     TypeErrorMultiplePosibleValues {
         actual_value: ValueType,
@@ -1199,6 +1243,15 @@ impl Display for RuntimeError {
             } => write!(
                 f,
                 "when calling function {function_name} found {found} number of args but expected {expected} number of args"
+            ),
+            RuntimeError::VariableAssignTypeError {
+                expected_value,
+                nullable,
+                actual_value,
+            } => write!(
+                f,
+                "expected type{} {expected_value:?} but found type {actual_value}",
+                if *nullable { " nullable" } else { "" }
             ),
         }
     }

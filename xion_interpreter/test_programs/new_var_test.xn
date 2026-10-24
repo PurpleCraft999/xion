@@ -1,0 +1,12 @@
+let x = 3;
+x="hello";
+let y:int = 3;
+#y="hello";
+let hi:? = null;
+hi=3;
+hi=true;
+hi="";
+hi=null;
+
+let num:int? = 0;
+num=null;

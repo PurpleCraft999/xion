@@ -50,7 +50,10 @@ impl NonNativeFunction {
             let name = name.to_owned();
             runtime
                 .get_current_scope_mut()
-                .add_var(name, Variable::new(value))
+                .add_var(
+                    name,
+                    Variable::new(value, crate::runtime::VariableType::Any),
+                )
                 .expect("this is safe because these are the first vars made");
         }
         runtime.run().map(|v| v.as_value())

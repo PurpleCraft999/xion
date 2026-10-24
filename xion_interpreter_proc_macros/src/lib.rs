@@ -1,12 +1,12 @@
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{ToTokens, format_ident, quote};
-use std::collections::HashMap;
+use std::{collections::HashMap, fs};
 use syn::{
     Block,
     Expr::{self},
-    Fields, GenericArgument, ImplItem, ImplItemFn, Item, ItemEnum, ItemFn, ItemImpl, ItemMod,
-    ItemStruct, LitStr, Path, PathArguments, ReturnType, Token, Type,
+    Fields, GenericArgument, Ident, ImplItem, ImplItemFn, Item, ItemEnum, ItemFn, ItemImpl,
+    ItemMod, ItemStruct, LitStr, Path, PathArguments, ReturnType, Token, Type,
     parse::{Parse, ParseStream},
     parse_macro_input, parse_quote,
     punctuated::Punctuated,
@@ -70,7 +70,8 @@ pub fn lib(_attr: TokenStream, stream: TokenStream) -> TokenStream {
         use crate::{
             functions::NativeFunction,
             class::{NativeClass, NativeClassInstance, Static},
-            runtime::{FromValue, RuntimeError, Variable, ToVariable},
+            ast::VariableAttributes,
+            runtime::{FromValue, RuntimeError, Variable, ToVariable, VariableType},
             Value,
         };
     )));
@@ -528,6 +529,67 @@ pub fn native_class(stream: TokenStream) -> TokenStream {
     // quote! {#class}.into()
 }
 
+fn name_to_var_type(name: &str) -> Option<Ident> {
+    let n = match name {
+        "i64" => "Int",
+        "f64" => "Float",
+        "String" => "String",
+        "bool" => "Bool",
+        "Array" => "Array",
+        "Vec" => "Array",
+        "ClassInstance" => "Int",
+        "Class" => "Int",
+        "NativeClass" => "Int",
+        _ => {
+            fs::write("/home/towner/code/rust/xion/macro_out.txt", name).unwrap();
+            return None;
+        }
+    };
+    Some(format_ident!("{n}"))
+}
+///type,if nullable
+fn var_type(ty: Type) -> (TokenStream2, bool) {
+    let mut current_ty = ty.clone();
+    let mut is_nullable = false;
+
+    // 1. Check if the outermost/first wrapper is an Option
+    if let Some(inner) = get_inner_type(&current_ty, "Option") {
+        current_ty = inner;
+        is_nullable = true;
+    }
+
+    while let Type::Path(ref p) = current_ty
+        && let Some(segment) = p.path.segments.last()
+        && let PathArguments::AngleBracketed(args) = &segment.arguments
+        && let Some(GenericArgument::Type(inner)) = args.args.first()
+    {
+        current_ty = inner.clone();
+    }
+
+    let name = if let syn::Type::Path(p) = current_ty {
+        p.path.segments.last().map(|s| s.ident.to_string())
+    } else if let syn::Type::TraitObject(t) = current_ty {
+        t.bounds.iter().find_map(|bound| {
+            if let syn::TypeParamBound::Trait(trait_bound) = bound {
+                trait_bound
+                    .path
+                    .segments
+                    .last()
+                    .map(|s| s.ident.to_string())
+            } else {
+                None
+            }
+        })
+    } else {
+        None
+    }
+    .unwrap_or_else(|| panic!("can not get var type {}", ty.to_token_stream()));
+
+    let n = name_to_var_type(&name).unwrap_or_else(|| panic!("cannot get var type of {name}"));
+
+    (quote! { VariableType::#n }, is_nullable)
+}
+
 #[proc_macro_derive(NativeClassInstance)]
 pub fn native_class_instance(stream: TokenStream) -> TokenStream {
     let class_instance = parse_macro_input!(stream as ItemStruct);
@@ -536,10 +598,12 @@ pub fn native_class_instance(stream: TokenStream) -> TokenStream {
     let field_names = class_instance
         .fields
         .iter()
-        .map(|f| f.ident.clone().expect("has field name"))
-        .map(|i| {
+        .map(|f| (f.ident.clone().expect("has field name"), f.ty.clone()))
+        .map(|(i, ty)| {
             let name_str = i.to_string();
-            quote! {#name_str=>Some(Variable::new(Value::from(self.#i.to_owned())))}
+            let (var_ty,nullable) = var_type(ty.clone());
+            let attr = quote! { VariableAttributes{is_nullable:#nullable,..Default::default()} };
+            quote! {#name_str=>Some(Variable::with_attributes(Value::from(self.#i.to_owned()),#var_ty,#attr))}
         })
         .collect::<Vec<_>>();
     let field_names_mut = class_instance
@@ -765,6 +829,8 @@ pub fn value_helper(attr: TokenStream, item: TokenStream) -> TokenStream {
                 quote! {}
             };
 
+            let (var_ty, nullable) = var_type(ty.clone());
+            let attr = quote! {VariableAttributes{is_nullable:#nullable,..Default::default()}};
             expansions.push(quote! {
                 // 1. impl From<Type> for Value
                 impl From<#ty> for #enum_name {
@@ -810,7 +876,7 @@ pub fn value_helper(attr: TokenStream, item: TokenStream) -> TokenStream {
                 }
                 impl ToVariable for #ty{
                     fn to_variable(self)->Variable{
-                        Variable::new(#enum_name::#variant_ident(self))
+                        Variable::with_attributes(#enum_name::#variant_ident(self),#var_ty,#attr)
                     }
 
 

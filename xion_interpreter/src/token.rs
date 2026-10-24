@@ -155,6 +155,7 @@ pub enum Token {
     If,
     IsEq,
     Null,
+    QuestionMark,
 }
 
 impl Token {
@@ -195,6 +196,7 @@ impl Token {
             '*' => Asterisk,
             '/' => Division,
             '.' => Dot,
+            '?' => QuestionMark,
             '\n' => NewLine,
             whitespace if is_whitespace(whitespace) => WhiteSpace,
             _ => return None,
@@ -219,7 +221,7 @@ impl Token {
             EOF => 0,
             LeftBrace | RightBrace | LeftBracket | RightBracket | SemiColon | Colon | Comma
             | Equals | LeftParen | RightParen | Plus | Minus | Asterisk | Division | Dot
-            | NewLine | WhiteSpace => 1,
+            | NewLine | WhiteSpace | QuestionMark => 1,
             Fn | If | IsEq => 2,
             Let => 3,
             BoolLiteral(true) | Null => 4,

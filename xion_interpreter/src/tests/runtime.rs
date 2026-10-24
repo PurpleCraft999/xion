@@ -43,13 +43,13 @@ fn test_variable_declaration_and_reference() {
     let nodes = vec![
         Node::VarDeclare {
             attributes: VariableAttributes::default(),
-
+            r#type: None,
             name: "x".to_string(),
             value: Box::new(Node::NumberLiteral(100)),
         },
         Node::VarDeclare {
             attributes: VariableAttributes::default(),
-
+            r#type: None,
             name: "y".to_string(),
             value: Box::new(Node::VarRef("x".to_string())),
         },
@@ -73,7 +73,7 @@ fn test_variable_reassignment() {
     let nodes = vec![
         Node::VarDeclare {
             attributes: VariableAttributes::default(),
-
+            r#type: None,
             name: "x".to_string(),
             value: Box::new(Node::NumberLiteral(10)),
         },
@@ -100,7 +100,7 @@ fn test_variable_reassignment() {
 fn test_math_operations() {
     let nodes = vec![Node::VarDeclare {
         attributes: VariableAttributes::default(),
-
+        r#type: None,
         name: "result".to_string(),
         value: Box::new(Node::Math {
             left: Box::new(Node::Math {
@@ -151,7 +151,7 @@ fn test_return_statement() {
 fn test_array_literal_evaluation() {
     let nodes = vec![Node::VarDeclare {
         attributes: VariableAttributes::default(),
-
+        r#type: None,
         name: "arr".to_string(),
         value: Box::new(Node::ArrayLiteral(vec![
             Node::NumberLiteral(1),
@@ -209,7 +209,7 @@ fn test_function_call() {
         },
         Node::VarDeclare {
             attributes: VariableAttributes::default(),
-
+            r#type: None,
             name: "res".to_string(),
             value: Box::new(Node::FnCall {
                 name: "add_one".to_string(),
@@ -237,7 +237,7 @@ fn test_class_declare() {
         name: "Point".to_string(),
         body: vec![Node::VarDeclare {
             attributes: VariableAttributes::default(),
-
+            r#type: None,
             name: "x".to_string(),
             value: Box::new(Node::NumberLiteral(5)),
         }],
@@ -257,7 +257,7 @@ fn test_constructor_var_assigned_to_field() {
     let nodes = vec![
         Node::VarDeclare {
             attributes: VariableAttributes::default(),
-
+            r#type: None,
             name: "initial_val".to_string(),
             value: Box::new(Node::NumberLiteral(77)),
         },
@@ -265,14 +265,14 @@ fn test_constructor_var_assigned_to_field() {
             name: "BoxObj".to_string(),
             body: vec![Node::VarDeclare {
                 attributes: VariableAttributes::default(),
-
+                r#type: None,
                 name: "val".to_string(),
                 value: Box::new(Node::NumberLiteral(0)),
             }],
         },
         Node::VarDeclare {
             attributes: VariableAttributes::default(),
-
+            r#type: None,
             name: "obj".to_string(),
             value: Box::new(Node::FnCall {
                 name: "BoxObj".to_string(),
@@ -307,7 +307,7 @@ fn test_constructor_var_assigned_to_field_shared_name() {
     let nodes = vec![
         Node::VarDeclare {
             attributes: VariableAttributes::default(),
-
+            r#type: None,
             name: "x".to_string(),
             value: Box::new(Node::NumberLiteral(100)),
         },
@@ -315,14 +315,14 @@ fn test_constructor_var_assigned_to_field_shared_name() {
             name: "Container".to_string(),
             body: vec![Node::VarDeclare {
                 attributes: VariableAttributes::default(),
-
+                r#type: None,
                 name: "x".to_string(),
                 value: Box::new(Node::NumberLiteral(0)),
             }],
         },
         Node::VarDeclare {
             attributes: VariableAttributes::default(),
-
+            r#type: None,
             name: "cnt".to_string(),
             value: Box::new(Node::FnCall {
                 name: "Container".to_string(),
@@ -359,14 +359,14 @@ fn test_field_access() {
             name: "Item".to_string(),
             body: vec![Node::VarDeclare {
                 attributes: VariableAttributes::default(),
-
+                r#type: None,
                 name: "price".to_string(),
                 value: Box::new(Node::NumberLiteral(250)),
             }],
         },
         Node::VarDeclare {
             attributes: VariableAttributes::default(),
-
+            r#type: None,
             name: "item".to_string(),
             value: Box::new(Node::FnCall {
                 name: "Item".to_string(),
@@ -375,7 +375,7 @@ fn test_field_access() {
         },
         Node::VarDeclare {
             attributes: VariableAttributes::default(),
-
+            r#type: None,
             name: "fetched_price".to_string(),
             value: Box::new(Node::FieldAccess {
                 var_name: "item".to_string(),
@@ -404,14 +404,14 @@ fn test_field_reassignment() {
             name: "Account".to_string(),
             body: vec![Node::VarDeclare {
                 attributes: VariableAttributes::default(),
-
+                r#type: None,
                 name: "balance".to_string(),
                 value: Box::new(Node::NumberLiteral(50)),
             }],
         },
         Node::VarDeclare {
             attributes: VariableAttributes::default(),
-
+            r#type: None,
             name: "acc".to_string(),
             value: Box::new(Node::FnCall {
                 name: "Account".to_string(),
@@ -453,7 +453,7 @@ fn test_method_call() {
             body: vec![
                 Node::VarDeclare {
                     attributes: VariableAttributes::default(),
-
+                    r#type: None,
                     name: "total".to_string(),
                     value: Box::new(Node::NumberLiteral(10)),
                 },
@@ -469,6 +469,7 @@ fn test_method_call() {
         },
         Node::VarDeclare {
             attributes: VariableAttributes::default(),
+            r#type: None,
             name: "w".to_string(),
             value: Box::new(Node::FnCall {
                 name: "Wallet".to_string(),
@@ -529,15 +530,20 @@ let n =(""+5.0);"#;
     ]);
     let mut expected: HashMap<String, Variable> = expected
         .into_iter()
-        .map(|(k, v)| (k.to_string(), Variable::new(Value::Float(v))))
+        .map(|(k, v)| {
+            (
+                k.to_string(),
+                Variable::new(Value::Float(v), VariableType::Float),
+            )
+        })
         .collect();
     expected.insert(
         String::from("m"),
-        Variable::new(Value::String("5".to_string())),
+        Variable::new(Value::String("5".to_string()), VariableType::String),
     );
     expected.insert(
         String::from("n"),
-        Variable::new(Value::String("5".to_string())),
+        Variable::new(Value::String("5".to_string()), VariableType::String),
     );
 
     assert!(
@@ -568,6 +574,7 @@ fn test_class_static_var_access() {
             name: "TestTest".to_string(),
             body: vec![Node::VarDeclare {
                 attributes: VariableAttributes::attr_static(),
+                r#type: None,
                 name: "test".to_string(),
                 value: Box::new(NumberLiteral(3)),
             }],

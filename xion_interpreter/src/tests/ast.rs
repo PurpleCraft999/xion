@@ -31,7 +31,7 @@ fn var_declaration() {
     assert_eq!(
         vec![VarDeclare {
             attributes: VariableAttributes::default(),
-
+            r#type: None,
             name: "var_name".to_string(),
             value: Box::new(Node::NumberLiteral(50))
         }],
@@ -161,7 +161,7 @@ fn class_delcaration_with_variable() {
             name: "MyClass".to_string(),
             body: vec![VarDeclare {
                 attributes: VariableAttributes::default(),
-
+                r#type: None,
                 name: "field".to_string(),
                 value: Box::new(StringLiteral("hello world".to_string()))
             }]
@@ -268,7 +268,7 @@ fn if_statment() {
             condition: Box::new(Node::BoolLiteral(true)),
             body: vec![Node::VarDeclare {
                 attributes: VariableAttributes::default(),
-
+                r#type: None,
                 name: "x".to_string(),
                 value: Box::new(Node::BoolLiteral(false))
             }]
@@ -351,6 +351,7 @@ fn parse_static_var() {
                 is_static: true,
                 ..Default::default()
             },
+            r#type: None,
             name: "var".to_string(),
             value: Box::new(Node::NumberLiteral(2))
         }],

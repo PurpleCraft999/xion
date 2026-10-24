@@ -82,6 +82,23 @@ impl AstBuilder {
         }
 
         let name = self.next_if_name()?;
+        //parse type
+        let ty = if self.consume_if(|t| t == &Colon) {
+            let name = if matches!(self.peek(), Some(Name(_))) {
+                self.next_if_name().ok()
+            } else {
+                None
+            };
+
+            if self.consume_if(|t| t == &Token::QuestionMark) {
+                attrs.is_nullable = true;
+            }
+
+            name
+        } else {
+            None
+        };
+
         if !self.consume_if(|t| t == &Equals) {
             error!("not equals after var name");
             return Err(AstError::unexpeced_token(
@@ -96,6 +113,7 @@ impl AstBuilder {
         Ok(Node::VarDeclare {
             attributes: attrs,
             name,
+            r#type: ty,
             value: Box::new(value),
         })
     }
@@ -106,9 +124,8 @@ impl AstBuilder {
     {
         let span = token.span();
         let node: Result<Node, AstError> = match token {
-            NumberLiteral(_) | Name(_) | StringLiteral(_) | LeftParen | Minus | BoolLiteral(_) => {
-                pratt_parser::parse_expression(self, 0, token, end_token.into())
-            }
+            NumberLiteral(_) | Name(_) | StringLiteral(_) | LeftParen | Minus | BoolLiteral(_)
+            | Null => pratt_parser::parse_expression(self, 0, token, end_token.into()),
             Return => {
                 let return_value = self.parse_next_expr::<Option<Token>>(&None).map(Box::new);
                 match return_value {
@@ -129,7 +146,7 @@ impl AstBuilder {
             }
             LeftBrace | RightBrace | RightParen | SemiColon | Comma | Colon | WhiteSpace
             | Equals | EOF | Class | Plus | Asterisk | RightBracket | Division | Dot | IsEq
-            | Static | Null => {
+            | Static | QuestionMark => {
                 error!("unexpected token while parsing expresion: {:?}", token);
                 Err(AstError::unexpeced_token(
                     "Number,name,string,bool,return,import,if,let,fn,-,[,(,",
@@ -438,6 +455,7 @@ pub enum Node {
     VarDeclare {
         attributes: VariableAttributes,
         name: String,
+        r#type: Option<String>,
         value: Box<Node>,
     },
     StringLiteral(String),
@@ -500,8 +518,10 @@ pub enum Node {
 }
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 #[non_exhaustive]
+///DO NOT CHANGE VALUES
 pub struct VariableAttributes {
-    is_static: bool,
+    pub(crate) is_static: bool,
+    pub(crate) is_nullable: bool,
 }
 impl VariableAttributes {
     pub fn attr_static() -> Self {
@@ -510,8 +530,12 @@ impl VariableAttributes {
             ..Default::default()
         }
     }
+
     pub fn is_static(&self) -> bool {
         self.is_static
+    }
+    pub fn is_nullable(&self) -> bool {
+        self.is_nullable
     }
 }
 

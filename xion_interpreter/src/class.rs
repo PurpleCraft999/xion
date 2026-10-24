@@ -347,7 +347,11 @@ impl<T: Into<Value> + Debug + Clone> Static<T> {
     //     self.0.clone().into()
     // }
     pub fn to_variable(&self) -> Variable {
-        Variable::with_attributes(self.0.clone().into(), VariableAttributes::attr_static())
+        Variable::with_attributes(
+            self.0.clone().into(),
+            crate::runtime::VariableType::Any,
+            VariableAttributes::attr_static(),
+        )
     }
 }
 

@@ -11,7 +11,10 @@ comparison and not
 methods for non objects
 static methods
 mutable value in valuetype
-
+fix Class for native types
 Make toml for imports instead
+
+tests for var typing
+
 
 figure out how to resolve import name conficts

@@ -570,7 +570,7 @@ pub fn native_class_instance(stream: TokenStream) -> TokenStream {
                 self.class.clone()
 
             }
-            fn get_field_mut(&mut self, name: &str,f:Box<dyn FnOnce(&mut Variable)>){
+            fn get_field_mut(&mut self, name: &str,f:Box<dyn FnOnce(&mut Variable)->Result<(),RuntimeError>>)->Result<(),RuntimeError>{
                 let var = match name{
                     #(#field_names),*,
                     _=>None
@@ -579,14 +579,15 @@ pub fn native_class_instance(stream: TokenStream) -> TokenStream {
                 };
                 if let Some(v) =var{
                     let mut v = v;
-                    f(&mut v);
+                    f(&mut v)?;
                     match name{
                         #(#field_names_mut),*,
                         _=>()
                     }
+                    Ok(())
+                } else{
+                    Err(RuntimeError::DoesNotExist(format!("variable {name} of class {:?}",self.class)))
                 }
-
-
 
             }
         }

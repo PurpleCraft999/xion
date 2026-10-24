@@ -172,8 +172,13 @@ impl RuntimeClassInstance {
         self.fields.get(name)
     }
 
-    pub fn get_field_mut(&mut self, name: &str) -> Option<&mut Variable> {
-        self.fields.get_mut(name)
+    pub fn get_field_mut(&mut self, name: &str) -> Result<&mut Variable, RuntimeError> {
+        self.fields
+            .get_mut(name)
+            .ok_or(RuntimeError::DoesNotExist(format!(
+                "field {name} of class {:?}",
+                self.class
+            )))
     }
     pub fn set_fields(&mut self, new: HashMap<String, Variable>) {
         self.fields = new;
@@ -281,14 +286,17 @@ impl ClassInstance {
             Self::Native(n) => n.lock().expect("panicking").get_field(field_name),
         }
     }
-    pub fn get_field_mut(&self, field_name: &str, f: impl FnOnce(&mut Variable) + 'static) {
+    pub fn get_field_mut(
+        &self,
+        field_name: &str,
+        f: impl FnOnce(&mut Variable) -> Result<(), RuntimeError> + 'static,
+    ) -> Result<(), RuntimeError> {
         match self {
-            Self::Runtime(r) => {
-                r.lock()
-                    .expect("panicking")
-                    .get_field_mut(field_name)
-                    .map(f);
-            }
+            Self::Runtime(r) => r
+                .lock()
+                .expect("panicking")
+                .get_field_mut(field_name)
+                .and_then(f),
             Self::Native(n) => n
                 .lock()
                 .expect("panicking")
@@ -347,7 +355,12 @@ pub trait NativeClassInstance: Debug + Send + Sync {
     fn call_method(&mut self, name: &str, args: Vec<Value>) -> RuntimeReturn;
     fn get_field(&self, name: &str) -> Option<Variable>;
     fn class(&self) -> Arc<dyn NativeClass>;
-    fn get_field_mut(&mut self, name: &str, f: Box<dyn FnOnce(&mut Variable)>);
+    #[allow(clippy::type_complexity)]
+    fn get_field_mut(
+        &mut self,
+        name: &str,
+        f: Box<dyn FnOnce(&mut Variable) -> Result<(), RuntimeError>>,
+    ) -> Result<(), RuntimeError>;
 }
 impl PartialEq for dyn NativeClassInstance {
     fn eq(&self, other: &Self) -> bool {

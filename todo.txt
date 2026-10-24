@@ -10,6 +10,7 @@ lines and chars for runtime errors
 comparison and not
 methods for non objects
 static methods
+mutable value in valuetype
 
 Make toml for imports instead
 

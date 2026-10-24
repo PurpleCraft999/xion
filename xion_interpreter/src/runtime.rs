@@ -80,17 +80,13 @@ impl Runtime {
 
             VarReasign { name, new_value } => {
                 let new_value = self.eval(*new_value)?.ok_or(RuntimeError::RequireValue)?;
-                if self
-                    .get_current_scope_mut()
-                    .with_var_mut(&name, |v| *v.get_value_mut() = new_value)
-                    .is_none()
-                {
-                    Err(RuntimeError::DoesNotExist(format!(
-                        "cannot reassign variable \"{name}\""
+                self.get_current_scope_mut()
+                    .with_var_mut(&name, |v| v.reassign_value(new_value))
+                    .ok_or(RuntimeError::DoesNotExist(format!(
+                        "variable {name} does not exist"
                     )))
-                } else {
-                    Ok(None)
-                }
+                    .flatten()
+                    .map(|_| None)
             }
             NumberLiteral(num) => Ok(Some(Value::Int(num))),
             FloatLiteral(float) => Ok(Some(Value::Float(float))),
@@ -192,14 +188,13 @@ impl Runtime {
                 new_value,
             } => {
                 let new_value = self.eval(*new_value)?.ok_or(RuntimeError::RequireValue)?;
-                let error = self.get_current_scope_mut().with_var_mut(&var_name, |var| {
-                    var.get_value_mut().reassign_field(&field_name, new_value)
-                });
-                if let Some(Err(e)) = error {
-                    Err(e)
-                } else {
-                    Ok(None)
-                }
+                self.get_current_scope_mut()
+                    .with_var_mut(&var_name, |var| {
+                        var.get_value_mut().reassign_field(&field_name, new_value)
+                    })
+                    .ok_or(RuntimeError::DoesNotExist(format!("variable {var_name}")))
+                    .flatten()
+                    .map(|_| None)
             }
             If { condition, body } => {
                 let condition = self.eval(*condition)?.ok_or(RuntimeError::RequireValue)?;
@@ -382,6 +377,7 @@ impl Runtime {
 
         let nodes = std::mem::take(&mut self.nodes);
         for node in nodes {
+            debug!("executing node:{node:?}");
             self.eval(node)?;
             if self.return_value.is_some() {
                 break;
@@ -590,12 +586,7 @@ impl Value {
     }
     fn reassign_field(&mut self, field_name: &str, new_value: Value) -> Result<(), RuntimeError> {
         match self {
-            Value::Object(obj) => {
-                obj.get_field_mut(field_name, |v| {
-                    *v.get_value_mut() = new_value;
-                });
-                Ok(())
-            }
+            Value::Object(obj) => obj.get_field_mut(field_name, |v| v.reassign_value(new_value)),
             e => {
                 error!(
                     "tried to reassigned field \"{field_name}\" on {}",
@@ -1050,20 +1041,26 @@ pub fn make_module(name: &str) -> Result<Scope, RuntimeError> {
     Ok(scope)
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Variable {
     value: Value,
+    variable_type: VariableType,
     attributes: VariableAttributes,
 }
 impl Variable {
     pub fn new(value: Value) -> Self {
         Self {
             value,
+            variable_type: VariableType::Nullable(VariableTypeNonNull::Any),
             attributes: VariableAttributes::default(),
         }
     }
     pub fn with_attributes(value: Value, attributes: VariableAttributes) -> Self {
-        Self { value, attributes }
+        Self {
+            value,
+            variable_type: VariableType::Nullable(VariableTypeNonNull::Any),
+            attributes,
+        }
     }
 
     pub fn get_value(&self) -> &Value {
@@ -1072,8 +1069,75 @@ impl Variable {
     pub fn to_value(self) -> Value {
         self.value
     }
+    pub fn reassign_value(&mut self, new_value: Value) -> Result<(), RuntimeError> {
+        if self.variable_type.can_accept(&new_value) {
+            self.value = new_value;
+            Ok(())
+        } else {
+            Err(RuntimeError::TypeError {
+                actual_value: new_value.value_type(),
+                expected_value: self.value_type(),
+            })
+        }
+    }
+    pub fn value_type(&self) -> ValueType {
+        self.value.value_type()
+    }
+
+    ///DO NOT CHANGE VALUE USE `Variable::reassign_value` INSTEAD
     pub fn get_value_mut(&mut self) -> &mut Value {
         &mut self.value
+    }
+}
+impl PartialEq for Variable {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[allow(dead_code)]
+enum VariableTypeNonNull {
+    String,
+    Int,
+    Float,
+    Object(Class),
+    Bool,
+    Array,
+    Any,
+}
+impl VariableTypeNonNull {
+    fn can_accept(&self, other: &Value) -> bool {
+        match (self, other) {
+            (Self::String, Value::String(_)) => true,
+            (Self::Array, Value::Array(_)) => true,
+            (Self::Bool, Value::Bool(_)) => true,
+            (Self::Float, Value::Float(_)) => true,
+            (Self::Int, Value::Int(_)) => true,
+            (Self::Object(s), Value::Object(c)) => *s == c.class(),
+            (Self::Any, _) => true,
+            _ => false,
+        }
+    }
+    // fn value_type(&self)->ValueType{
+    //     match self{
+
+    //     }
+    // }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[allow(dead_code)]
+enum VariableType {
+    NonNull(VariableTypeNonNull),
+    Nullable(VariableTypeNonNull),
+}
+impl VariableType {
+    fn can_accept(&self, other: &Value) -> bool {
+        match self {
+            Self::Nullable(n) => n.can_accept(other) || other == &Value::Null,
+            Self::NonNull(n) => n.can_accept(other),
+        }
     }
 }
 

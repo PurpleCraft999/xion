@@ -5,7 +5,10 @@ use crate::{
         Node::{self, StringLiteral, *},
         VariableAttributes,
     },
-    token::Token::{self, *},
+    token::{
+        Lexer,
+        Token::{self, *},
+    },
 };
 const TRUE: Token = Token::BoolLiteral(true);
 const FALSE: Token = Token::BoolLiteral(false);
@@ -14,6 +17,10 @@ fn ast(vec: Vec<Token>) -> Vec<Node> {
     crate::test_log::init_logger();
     AstBuilder::new(vec).build().expect("valid ast").nodes
 }
+fn parse(code: &str) -> Vec<Node> {
+    ast(Lexer::new(code).lex())
+}
+
 #[allow(non_snake_case)]
 fn Name(name: &str) -> Token {
     Token::Name(name.to_string())
@@ -427,4 +434,52 @@ fn calling_str_func() {
         }],
         ast
     )
+}
+
+#[test]
+fn typed_variables() {
+    let ast = parse("let x:int = 5;");
+    assert_eq!(
+        vec![Node::VarDeclare {
+            attributes: VariableAttributes::default(),
+            name: "x".to_string(),
+            r#type: Some("int".to_string()),
+            value: Box::new(Node::NumberLiteral(5))
+        }],
+        ast
+    );
+}
+
+#[test]
+fn typed_variables_nullable() {
+    let ast = parse("let x:int? = 5;");
+    assert_eq!(
+        vec![Node::VarDeclare {
+            attributes: VariableAttributes {
+                is_nullable: true,
+                ..Default::default()
+            },
+            name: "x".to_string(),
+            r#type: Some("int".to_string()),
+            value: Box::new(Node::NumberLiteral(5))
+        }],
+        ast
+    );
+}
+
+#[test]
+fn typed_var_nullable_any() {
+    let ast = parse("let x:? =true;");
+    assert_eq!(
+        vec![Node::VarDeclare {
+            attributes: VariableAttributes {
+                is_nullable: true,
+                ..Default::default()
+            },
+            name: "x".to_string(),
+            r#type: None,
+            value: Box::new(Node::BoolLiteral(true))
+        }],
+        ast
+    );
 }

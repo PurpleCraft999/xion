@@ -6,9 +6,9 @@ fn run(nodes: Vec<Node>) -> (RuntimeReturn, Runtime) {
     crate::test_log::init_logger();
     let mut run = Runtime::main(nodes).expect("test env should not fail");
     let err = run.run();
-    if let Err(err) = err {
-        panic!("{err}")
-    }
+    // if let Err(err) = err {
+    //     panic!("{err}")
+    // }
     (err.map(|s| s.as_value()), run)
 }
 use crate::parse_and_lex;
@@ -533,17 +533,17 @@ let n =(""+5.0);"#;
         .map(|(k, v)| {
             (
                 k.to_string(),
-                Variable::new(Value::Float(v), VariableType::Float),
+                Variable::new(Value::Float(v), VariableType::Float).unwrap(),
             )
         })
         .collect();
     expected.insert(
         String::from("m"),
-        Variable::new(Value::String("5".to_string()), VariableType::String),
+        Variable::new(Value::String("5".to_string()), VariableType::String).unwrap(),
     );
     expected.insert(
         String::from("n"),
-        Variable::new(Value::String("5".to_string()), VariableType::String),
+        Variable::new(Value::String("5".to_string()), VariableType::String).unwrap(),
     );
 
     assert!(
@@ -617,4 +617,33 @@ fn field_access_into_func_call() {
 fn call_string_method() {
     let run = run!(parse:r#"return "hello".len();"#);
     assert_eq!(Ok(Some(Value::Int(5))), run)
+}
+
+#[test]
+fn var_declare_typed() {
+    let run = run!(parse:"let n:int = 5;return n;");
+    assert_eq!(Ok(Some(Value::Int(5))), run);
+}
+#[test]
+fn var_type_reassign() {
+    let run = run!(parse:"let n:int = 5; n=20;  return n;");
+    assert_eq!(Ok(Some(Value::Int(20))), run);
+}
+#[test]
+fn var_type_assign_null() {
+    let run = run!(parse:"let n:int? = 5; n=null;  return n;");
+    assert_eq!(Ok(Some(Value::Null)), run);
+}
+
+#[test]
+fn var_typed_reassign_incorect_type() {
+    let run = run!(parse:r#"let n:String = "hi"; n=4; "#);
+    assert!(matches!(
+        run,
+        Err(RuntimeError::VariableAssignTypeError {
+            expected_value: VariableType::String,
+            nullable: false,
+            actual_value: ValueType::Int
+        })
+    ))
 }

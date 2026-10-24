@@ -1,3 +1,18 @@
+class Type{
+    let name:String?=null;
+
+    fn name(){return name;}
+
+}
+class N{
+
+
+
+
+}
+
+
+
 let x = 3;
 x="hello";
 let y:int = 3;
@@ -9,4 +24,7 @@ hi="";
 hi=null;
 
 let num:int? = 0;
-num=null;
+
+let type:Type? = null;
+print(type);
+

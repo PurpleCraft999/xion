@@ -67,7 +67,14 @@ impl Runtime {
                         "String" => VariableType::String,
                         "float" => VariableType::Float,
                         "bool" => VariableType::Bool,
-
+                        "Any" => VariableType::Any,
+                        "Class" => {
+                            VariableType::Class(self.get_current_scope().get_class(&ty).ok_or(
+                                RuntimeError::DoesNotExist(format!(
+                                    "variable {name} cannot have type {ty} because class {ty}"
+                                )),
+                            )?)
+                        }
                         _ => VariableType::Object(self.get_current_scope().get_class(&ty).ok_or(
                             RuntimeError::DoesNotExist(format!(
                                 "variable {name} cannot have type {ty} because class {ty}"
@@ -80,15 +87,15 @@ impl Runtime {
 
                 let value = self.eval(*value)?.ok_or(RuntimeError::RequireValue)?;
 
-                if value == Value::Null && !attributes.is_nullable() {
-                    return Err(RuntimeError::VariableAssignTypeError {
-                        expected_value: ty,
-                        nullable: attributes.is_nullable(),
-                        actual_value: value.value_type(),
-                    });
-                }
+                // if value == Value::Null && !attributes.is_nullable() {
+                //     return Err(RuntimeError::VariableAssignTypeError {
+                //         expected_value: ty,
+                //         nullable: attributes.is_nullable(),
+                //         actual_value: value.value_type(),
+                //     });
+                // }
 
-                let var = Variable::with_attributes(value, ty, attributes);
+                let var = Variable::with_attributes(value, ty, attributes)?;
                 self.get_current_scope_mut().add_var(name.clone(), var)?;
 
                 Ok(None)
@@ -941,7 +948,7 @@ impl Scope {
                 Value::Class(class.clone()),
                 VariableType::Class(class.clone()),
                 VariableAttributes::attr_static(),
-            ),
+            )?,
         )?;
         Ok(())
     }
@@ -970,7 +977,7 @@ impl Scope {
                     Value::Class(class.clone()),
                     VariableType::Class(class),
                     VariableAttributes::attr_static(),
-                ),
+                )?,
             )?;
             Ok(())
         } else {
@@ -1082,18 +1089,36 @@ pub struct Variable {
     attributes: VariableAttributes,
 }
 impl Variable {
-    pub fn new(value: Value, ty: VariableType) -> Self {
-        Self {
-            value,
-            variable_type: ty,
-            attributes: VariableAttributes::default(),
-        }
+    pub fn new(value: Value, ty: VariableType) -> Result<Self, RuntimeError> {
+        let attrs = VariableAttributes::default();
+        Self::with_attributes(value, ty, attrs)
     }
-    pub fn with_attributes(value: Value, ty: VariableType, attributes: VariableAttributes) -> Self {
-        Self {
+    pub fn with_attributes(
+        value: Value,
+        ty: VariableType,
+        attributes: VariableAttributes,
+    ) -> Result<Self, RuntimeError> {
+        Self::value_is_valid(ty.clone(), &value, &attributes)?;
+        Ok(Self {
             value,
             variable_type: ty,
             attributes,
+        })
+    }
+    fn value_is_valid(
+        variable_type: VariableType,
+        value: &Value,
+        attributes: &VariableAttributes,
+    ) -> Result<(), RuntimeError> {
+        if !(variable_type.can_accept(value) || (attributes.is_nullable() && value == &Value::Null))
+        {
+            Err(RuntimeError::VariableAssignTypeError {
+                expected_value: variable_type,
+                nullable: attributes.is_nullable(),
+                actual_value: value.value_type(),
+            })
+        } else {
+            Ok(())
         }
     }
 
@@ -1104,18 +1129,9 @@ impl Variable {
         self.value
     }
     pub fn reassign_value(&mut self, new_value: Value) -> Result<(), RuntimeError> {
-        if self.variable_type.can_accept(&new_value)
-            || (self.attributes.is_nullable() && new_value == Value::Null)
-        {
-            self.value = new_value;
-            Ok(())
-        } else {
-            Err(RuntimeError::VariableAssignTypeError {
-                expected_value: self.variable_type.clone(),
-                nullable: self.attributes.is_nullable(),
-                actual_value: new_value.value_type(),
-            })
-        }
+        Self::value_is_valid(self.variable_type.clone(), &new_value, &self.attributes)?;
+        self.value = new_value;
+        Ok(())
     }
     pub fn value_type(&self) -> ValueType {
         self.value.value_type()
@@ -1144,6 +1160,20 @@ pub enum VariableType {
     Array,
     Any,
 }
+impl Display for VariableType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Object(o) => write!(f, "{}", o.name()),
+            Self::Any => write!(f, "Any"),
+            Self::Array => write!(f, "Array"),
+            Self::Bool => write!(f, "bool"),
+            Self::Class(c) => write!(f, "Class<{}>", c.name()),
+            Self::Float => write!(f, "float"),
+            Self::Int => write!(f, "int"),
+            Self::String => write!(f, "String"),
+        }
+    }
+}
 impl VariableType {
     fn can_accept(&self, other: &Value) -> bool {
         match (self, other) {
@@ -1153,6 +1183,7 @@ impl VariableType {
             (Self::Float, Value::Float(_)) => true,
             (Self::Int, Value::Int(_)) => true,
             (Self::Object(s), Value::Object(c)) => *s == c.class(),
+            (Self::Class(c), Value::Class(o)) => c == o,
             (Self::Any, Value::Null) => false,
             (Self::Any, _) => true,
             _ => false,
@@ -1250,8 +1281,8 @@ impl Display for RuntimeError {
                 actual_value,
             } => write!(
                 f,
-                "expected type{} {expected_value:?} but found type {actual_value}",
-                if *nullable { " nullable" } else { "" }
+                "expected type{} {expected_value} but found type {actual_value}",
+                if *nullable { " nullable" } else { "" },
             ),
         }
     }

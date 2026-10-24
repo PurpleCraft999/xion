@@ -352,6 +352,7 @@ impl<T: Into<Value> + Debug + Clone> Static<T> {
             crate::runtime::VariableType::Any,
             VariableAttributes::attr_static(),
         )
+        .expect("has the any type")
     }
 }
 

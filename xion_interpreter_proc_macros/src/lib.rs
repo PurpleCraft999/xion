@@ -537,11 +537,11 @@ fn name_to_var_type(name: &str) -> Option<Ident> {
         "bool" => "Bool",
         "Array" => "Array",
         "Vec" => "Array",
-        "ClassInstance" => "Int",
-        "Class" => "Int",
-        "NativeClass" => "Int",
+        "ClassInstance" => "Object",
+        "Class" => "Class",
+        "NativeClass" => "Class",
         _ => {
-            fs::write("/home/towner/code/rust/xion/macro_out.txt", name).unwrap();
+            fs::write("/home/towner/code/rust/xion/name_to_var_type_out.txt", name).unwrap();
             return None;
         }
     };
@@ -601,9 +601,12 @@ pub fn native_class_instance(stream: TokenStream) -> TokenStream {
         .map(|f| (f.ident.clone().expect("has field name"), f.ty.clone()))
         .map(|(i, ty)| {
             let name_str = i.to_string();
-            let (var_ty,nullable) = var_type(ty.clone());
+            let (mut var_ty,nullable) = var_type(ty.clone());
+            if var_ty.to_string()=="VariableType :: Class"{
+                var_ty=quote! {VariableType::Class(crate::class::Class::Native(self.class()))}
+            }
             let attr = quote! { VariableAttributes{is_nullable:#nullable,..Default::default()} };
-            quote! {#name_str=>Some(Variable::with_attributes(Value::from(self.#i.to_owned()),#var_ty,#attr))}
+            quote! {#name_str=>Some(Variable::with_attributes(Value::from(self.#i.to_owned()),#var_ty,#attr).expect("made from this type"))}
         })
         .collect::<Vec<_>>();
     let field_names_mut = class_instance
@@ -829,7 +832,16 @@ pub fn value_helper(attr: TokenStream, item: TokenStream) -> TokenStream {
                 quote! {}
             };
 
-            let (var_ty, nullable) = var_type(ty.clone());
+            let (mut var_ty, nullable) = var_type(ty.clone());
+
+            if var_ty.to_string() == "VariableType :: Class" {
+                // fs::write("/home/towner/code/rust/xion/here.text",var_ty.to_string()+"hfeih").unwrap();
+                var_ty = quote! {VariableType::Class(self.clone())}
+            }
+            if var_ty.to_string() == "VariableType :: Object" {
+                var_ty = quote! {VariableType::Object(self.class())}
+            }
+
             let attr = quote! {VariableAttributes{is_nullable:#nullable,..Default::default()}};
             expansions.push(quote! {
                 // 1. impl From<Type> for Value
@@ -876,7 +888,7 @@ pub fn value_helper(attr: TokenStream, item: TokenStream) -> TokenStream {
                 }
                 impl ToVariable for #ty{
                     fn to_variable(self)->Variable{
-                        Variable::with_attributes(#enum_name::#variant_ident(self),#var_ty,#attr)
+                        Variable::with_attributes(#enum_name::#variant_ident(self.to_owned()),#var_ty,#attr).expect("made from this type")
                     }
 
 

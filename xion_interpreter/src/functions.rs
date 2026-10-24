@@ -52,7 +52,7 @@ impl NonNativeFunction {
                 .get_current_scope_mut()
                 .add_var(
                     name,
-                    Variable::new(value, crate::runtime::VariableType::Any),
+                    Variable::new(value, crate::runtime::VariableType::Any)?,
                 )
                 .expect("this is safe because these are the first vars made");
         }

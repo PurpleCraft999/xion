@@ -76,7 +76,9 @@ pub fn lib(_attr: TokenStream, stream: TokenStream) -> TokenStream {
         };
     )));
     content.push(Item::Use(parse_quote!(
-        use xion_interpreter_proc_macros::{native_function, NativeClass, NativeClassInstance};
+        use xion_interpreter_proc_macros::{
+            native_function, NativeClass, NativeClassInstance, instance_method,
+        };
     )));
 
     {

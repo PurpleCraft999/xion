@@ -5,16 +5,12 @@ class Type{
 
 }
 fn greet(name:String,home_town:String?){
-    
-
     if home_town==null {
         print("hi "+name);
         
         return;
     }
     print("hi "+name+" from "+home_town);
-
-    
 }
 
 

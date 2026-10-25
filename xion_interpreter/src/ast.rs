@@ -50,7 +50,11 @@ impl AstBuilder {
         }
     }
     fn next(&mut self) -> Result<Token, AstError> {
-        self.tokens.next().ok_or(AstError::NoNextToken)
+        let t = self.tokens.next().ok_or(AstError::NoNextToken);
+        if let Ok(t) = &t {
+            self.current_char += t.span();
+        }
+        t
     }
     fn parse_class(&mut self) -> Result<Node, AstError> {
         self.consume_if(|t| t == &Class);
@@ -134,7 +138,6 @@ impl AstBuilder {
         E: Into<Option<Token>>,
         Option<&'expr Token>: From<&'expr E>,
     {
-        let span = token.span();
         let node: Result<Node, AstError> = match token {
             NumberLiteral(_) | Name(_) | StringLiteral(_) | LeftParen | Minus | BoolLiteral(_)
             | Null => pratt_parser::parse_expression(self, 0, token, end_token.into()),
@@ -191,7 +194,7 @@ impl AstBuilder {
             });
         }
 
-        self.current_char += span;
+        // self.current_char += span;
         end
     }
 

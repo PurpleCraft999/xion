@@ -2,8 +2,6 @@ use xion_interpreter_proc_macros::lib;
 
 #[lib]
 mod lang {
-    use xion_interpreter_proc_macros::instance_method;
-
     // use super::*;
     #[native_function]
     fn print(value: Value, mut end: Option<String>) {

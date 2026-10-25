@@ -452,6 +452,7 @@ impl Value {
                 Value::String(right) => Ok(Value::String(left.to_owned() + right)),
                 Value::Array(right) => Ok(Value::String(left.to_owned() + &right.to_string())),
                 Value::Float(right) => Ok(Value::String(left.to_owned() + &right.to_string())),
+                Value::Null => Ok(Value::String(left.to_owned() + "null")),
                 _ => unimplemented!(),
             },
             Value::Array(left) => match other {
@@ -462,6 +463,10 @@ impl Value {
                 Value::Float(right) => Ok(Value::Float(*left + *right)),
                 Value::Int(right) => Ok(Value::Float(*left + *right as f64)),
                 Value::String(right) => Ok(Value::String(left.to_string() + right)),
+                e => Err(InvalidTypeRight(e.value_type())),
+            },
+            Value::Null => match other {
+                Value::String(right) => Ok(Value::String(String::from("null") + right)),
                 e => Err(InvalidTypeRight(e.value_type())),
             },
             _ => unimplemented!(),

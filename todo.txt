@@ -5,6 +5,7 @@ add module testing
 consider merging two arrays with +
 while loops
 for loops
+docs
 conversion functions for types
 lines and chars for runtime errors
 comparison and not

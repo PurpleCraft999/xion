@@ -1,32 +1,37 @@
-class Type{
-    let name:String?=null;
+#class Type{
+#    let name:String?=null;
+#
+#    fn name(){return name;}
+#
+#}
+#fn greet(name:String,home_town:String?){
+#    if home_town==null {
+#        print("hi "+name);
+#        
+#        return;
+#    }
+#    print("hi "+name+" from "+home_town);
+#}
 
-    fn name(){return name;}
-
+fn hello(name:String,age:int?,hobbie:String?){
+    print(name+age+hobbie);
 }
-fn greet(name:String,home_town:String?){
-    if home_town==null {
-        print("hi "+name);
-        
-        return;
-    }
-    print("hi "+name+" from "+home_town);
-}
 
 
+hello("mark",11,"code");
 
-let x = 3;
-x="hello";
-let y:int = 3;
-#y="hello";
-let hi:? = null;
-hi=3;
-hi=true;
-hi="";
-hi=null;
-let type:Type? = null;
-let num:int? = 0;
-greet("joe","new york");
-greet("amanda");
+#let x = 3;
+#x="hello";
+#let y:int = 3;
+##y="hello";
+#let hi:? = null;
+#hi=3;
+#hi=true;
+#hi="";
+#hi=null;
+#let type:Type? = null;
+#let num:int? = 0;
+#greet("joe","new york");
+#greet("amanda");
 
 

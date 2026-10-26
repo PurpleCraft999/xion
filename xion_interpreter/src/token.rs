@@ -1,6 +1,6 @@
 use std::{iter::Peekable, str::Chars};
 
-use log::warn;
+use log::{error, warn};
 
 use crate::token::Token::*;
 
@@ -61,7 +61,7 @@ impl<'a> Lexer<'a> {
         self.tokens.push(token);
     }
 
-    pub fn lex(mut self) -> Vec<Token> {
+    pub fn lex(mut self) -> Result<Vec<Token>, LexerError> {
         while let Some(current) = self.next() {
             //comments
             if current == '#' {
@@ -72,6 +72,10 @@ impl<'a> Lexer<'a> {
             //string literals
             if current == '"' {
                 let string_lit = self.consume_until('"');
+                if string_lit.len() > u32::MAX as usize {
+                    error!("String literal is larger than {} bytes long", u32::MAX);
+                    return Err(LexerError::StringLiteralToLong(string_lit.len()));
+                }
                 //consume end "
                 self.next();
                 let string = escape(string_lit);
@@ -100,11 +104,20 @@ impl<'a> Lexer<'a> {
             }
 
             warn!(target:"lexer", "unknown token {}", current_str);
+            return Err(LexerError::UnreconizedToken(current_str));
         }
         self.add_token(Token::EOF);
 
-        self.tokens
+        Ok(self.tokens)
     }
+}
+#[derive(Debug)]
+pub enum LexerError {
+    ///actual size of the string
+    ///u32::MAX is the max size
+    StringLiteralToLong(usize),
+    ///a token thats not in the language such as an emoji
+    UnreconizedToken(String),
 }
 
 const fn is_whitespace(c: char) -> bool {
@@ -120,6 +133,7 @@ fn escape(s: String) -> String {
 fn is_name(name: &str) -> bool {
     name.starts_with(|c: char| c.is_ascii_alphabetic())
         && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+        && name.len() < u32::MAX as usize
 }
 
 #[derive(Debug, PartialEq)]
@@ -153,7 +167,9 @@ pub enum Token {
     Dot,
     Import,
     If,
-    IsEq,
+    IsEqual,
+    NotEqual,
+    ExclamationMark,
     Null,
     QuestionMark,
 }
@@ -197,6 +213,7 @@ impl Token {
             '/' => Division,
             '.' => Dot,
             '?' => QuestionMark,
+            '!' => ExclamationMark,
             '\n' => NewLine,
             whitespace if is_whitespace(whitespace) => WhiteSpace,
             _ => return None,
@@ -205,7 +222,8 @@ impl Token {
     }
     fn from_two_char(c1: char, c2: char) -> Option<Self> {
         let token = match (c1, c2) {
-            ('=', '=') => IsEq,
+            ('=', '=') => IsEqual,
+            ('!', '=') => NotEqual,
             _ => return None,
         };
         Some(token)
@@ -221,19 +239,27 @@ impl Token {
             EOF => 0,
             LeftBrace | RightBrace | LeftBracket | RightBracket | SemiColon | Colon | Comma
             | Equals | LeftParen | RightParen | Plus | Minus | Asterisk | Division | Dot
-            | NewLine | WhiteSpace | QuestionMark => 1,
-            Fn | If | IsEq => 2,
+            | NewLine | WhiteSpace | QuestionMark | ExclamationMark => 1,
+            Fn | If | IsEqual | NotEqual => 2,
             Let => 3,
             BoolLiteral(true) | Null => 4,
             BoolLiteral(false) | Class => 5,
             Static | Return | Import => 6,
-            //i guess technicly we should check if len is higher than u32::Max for all three of these
+            //len checked already for all three of these
+            //also who is writting names this long
             Name(name) => name.len() as u32,
             //two is added to the length because of quotes
             //use chars().count() because string length is in bytes not chars
             StringLiteral(str_lit) => str_lit.chars().count() as u32 + 2,
-            //string length is fine becuase 0..9 is all ascii
-            NumberLiteral(int) => int.to_string().len() as u32,
+            NumberLiteral(int) => {
+                if *int > 0 {
+                    int.ilog10() + 1
+                } else if *int < 0 {
+                    int.abs().ilog10() + 2
+                } else {
+                    1
+                }
+            }
         }
     }
 }

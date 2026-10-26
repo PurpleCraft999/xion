@@ -18,7 +18,7 @@ fn ast(vec: Vec<Token>) -> Vec<Node> {
     AstBuilder::new(vec).build().expect("valid ast").nodes
 }
 fn parse(code: &str) -> Vec<Node> {
-    ast(Lexer::new(code).lex())
+    ast(Lexer::new(code).lex().unwrap())
 }
 
 #[allow(non_snake_case)]
@@ -291,12 +291,12 @@ fn if_statment() {
 fn is_equal() {
     let ast = ast(vec![
         Token::NumberLiteral(5),
-        IsEq,
+        IsEqual,
         Token::NumberLiteral(5),
         SemiColon,
     ]);
     assert_eq!(
-        vec![IsEqual {
+        vec![Node::IsEqual {
             left: Box::new(Node::NumberLiteral(5)),
             right: Box::new(Node::NumberLiteral(5))
         }],
@@ -482,6 +482,18 @@ fn typed_var_nullable_any() {
             name: "x".to_string(),
             r#type: None,
             value: Box::new(Node::BoolLiteral(true))
+        }],
+        ast
+    );
+}
+
+#[test]
+fn not_equal() {
+    let ast = parse("1!= 2;");
+    assert_eq!(
+        vec![Node::NotEqual {
+            left: Box::new(Node::NumberLiteral(1)),
+            right: Box::new(Node::NumberLiteral(2))
         }],
         ast
     );

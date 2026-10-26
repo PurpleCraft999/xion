@@ -11,7 +11,7 @@ fn run(nodes: Vec<Node>) -> (RuntimeReturn, Runtime) {
     // }
     (err.map(|s| s.as_value()), run)
 }
-use crate::parse_and_lex;
+use crate::lex_and_build_ast;
 macro_rules! run {
     ($nodes:expr) => {
         run($nodes).0
@@ -20,10 +20,10 @@ macro_rules! run {
         run($nodes).1
     };
     (parse:$p:tt) => {
-        run(parse_and_lex($p).nodes).0
+        run(lex_and_build_ast($p).unwrap().nodes).0
     };
     (parse:$p:tt;Runtime) => {
-        run(parse_and_lex($p).nodes).1
+        run(lex_and_build_ast($p).unwrap().nodes).1
     };
 }
 
@@ -684,4 +684,16 @@ fn optinal_function_var() {
         ))),
         run
     )
+}
+
+#[test]
+fn not_equal_does_equal() {
+    let run = run!(parse:"return 1 != 1;");
+    assert_eq!(Ok(Some(Value::Bool(false))), run)
+}
+
+#[test]
+fn not_equal_does_not_equal() {
+    let run = run!(parse:"return 1 != 2;");
+    assert_eq!(Ok(Some(Value::Bool(true))), run)
 }

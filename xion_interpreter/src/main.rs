@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 
 use log::{debug, error};
 use xion_interpreter::runtime::Runtime;
@@ -27,7 +27,13 @@ fn main() {
         };
     }
     let path = PathBuf::from(main_file);
-    let nodes = xion_interpreter::parse_and_lex_file(&path);
+    let nodes = match xion_interpreter::lex_and_build_ast(&fs::read_to_string(&path).unwrap()) {
+        Ok(a) => a,
+        Err(e) => {
+            error!(target:"main","{e:?}");
+            return;
+        }
+    };
     debug!("running main");
 
     let mut runtime = match Runtime::main(nodes.nodes) {

@@ -1,5 +1,3 @@
-use std::path::Path;
-
 pub mod ast;
 pub mod class;
 pub mod functions;
@@ -23,20 +21,21 @@ mod test_log {
         });
     }
 }
-pub fn parse_and_lex_file(path: impl AsRef<Path>) -> Ast {
-    let file = std::fs::read_to_string(path).unwrap();
-    parse_and_lex(&file)
-}
 
-pub fn parse_and_lex(code: &str) -> Ast {
+pub fn lex_and_build_ast(code: &str) -> Result<Ast, LexAndAstError> {
     #[cfg(test)]
     {
         test_log::init_logger();
     }
 
     let lexer = token::Lexer::new(code);
-    let lexed = lexer.lex();
+    let lexed = lexer.lex().map_err(LexAndAstError::Parse)?;
     log::debug!("lexed: {:?}", lexed);
     let ast = ast::AstBuilder::new(lexed);
-    ast.build().expect("valid ast")
+    ast.build().map_err(LexAndAstError::Ast)
+}
+#[derive(Debug)]
+pub enum LexAndAstError {
+    Parse(token::LexerError),
+    Ast(ast::AstError),
 }

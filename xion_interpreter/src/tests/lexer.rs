@@ -5,7 +5,7 @@ use super::{
 
 fn lex(str: &str) -> Vec<Token> {
     crate::test_log::init_logger();
-    let mut v = Lexer::new(str).lex();
+    let mut v = Lexer::new(str).lex().unwrap();
     v.retain(|t| t != &WhiteSpace);
     v.pop_if(|e| e == &EOF);
     v
@@ -97,8 +97,8 @@ fn parse_literals() {
 }
 #[test]
 fn parse_dual_tokens() {
-    let lexed = lex("==");
-    assert_eq!(vec![IsEq], lexed);
+    let lexed = lex("== !=");
+    assert_eq!(vec![IsEqual, NotEqual], lexed);
 }
 
 #[test]

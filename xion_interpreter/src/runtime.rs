@@ -1,5 +1,7 @@
 use std::collections::HashMap;
+use std::error::Error;
 use std::fmt::{Debug, Display};
+use std::fs;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
@@ -13,7 +15,7 @@ use crate::class::{
 use crate::functions::{Function, FunctionReturn, NativeFunction, NonNativeFunction};
 use crate::runtime::MathError::{InvalidTypeLeft, InvalidTypeRight};
 use crate::runtime::RuntimeError::{DoesNotExist, Other};
-use crate::{parse_and_lex_file, xion_std};
+use crate::{lex_and_build_ast, xion_std};
 
 pub type RuntimeReturn = Result<Option<Value>, RuntimeError>;
 
@@ -224,6 +226,12 @@ impl Runtime {
                 let right = self.eval(*right)?;
 
                 Ok(Some(Value::Bool(left == right)))
+            }
+            NotEqual { left, right } => {
+                let left = self.eval(*left)?;
+                let right = self.eval(*right)?;
+
+                Ok(Some(Value::Bool(left != right)))
             }
             CallChain { item: func, other } => {
                 fn eval_other_node(
@@ -1023,7 +1031,17 @@ impl Scope {
 
 pub fn make_module(name: &str) -> Result<Scope, RuntimeError> {
     fn parse_file(path: &Path) -> Result<Scope, RuntimeError> {
-        let nodes = parse_and_lex_file(path).nodes;
+        let nodes = lex_and_build_ast(
+            &fs::read_to_string(path)
+                .map_err(RuntimeIoError)
+                .map_err(RuntimeError::IoError)?,
+        )
+        .map_err(|e| {
+            RuntimeError::Other(format!(
+                "while parsing module ran into parser or ast error: {e:?}"
+            ))
+        })?
+        .nodes;
         let mut run =
             Runtime::with_scope_and_nodes(nodes, Scope::new(path.to_string_lossy().to_string()));
         run.run()?;
@@ -1035,7 +1053,8 @@ pub fn make_module(name: &str) -> Result<Scope, RuntimeError> {
             scope.extend(parse_file(path)?)?
         } else if path.is_dir() {
             let dir = std::fs::read_dir(path)
-                .map_err(|e| RuntimeError::Other(format!("error: {e} on path {path:?}")))?
+                .map_err(RuntimeIoError)
+                .map_err(RuntimeError::IoError)?
                 .flatten();
             for file in dir {
                 let file_type = file
@@ -1240,6 +1259,17 @@ pub enum RuntimeError {
         expected: usize,
         found: usize,
     },
+    IoError(RuntimeIoError),
+}
+#[derive(Debug)]
+pub struct RuntimeIoError(std::io::Error);
+impl PartialEq for RuntimeIoError {
+    fn eq(&self, other: &Self) -> bool {
+        //this is definitly broken in someway
+        self.0.source().map(|e| e.to_string()) == other.0.source().map(|e| e.to_string())
+            || self.0.raw_os_error() == self.0.raw_os_error()
+            || self.0.kind() == self.0.kind()
+    }
 }
 
 impl Display for RuntimeError {
@@ -1287,6 +1317,7 @@ impl Display for RuntimeError {
                 "expected type{} {expected_value} but found type {actual_value}",
                 if *nullable { " nullable" } else { "" },
             ),
+            RuntimeError::IoError(e) => write!(f, "interpreter ran into an io error {e:?}"),
         }
     }
 }

@@ -154,8 +154,8 @@ impl AstBuilder {
                 return Ok(Node::NewLine);
             }
             LeftBrace | RightBrace | RightParen | SemiColon | Comma | Colon | WhiteSpace
-            | Equals | EOF | Class | Plus | Asterisk | RightBracket | Division | Dot | IsEq
-            | Static | QuestionMark => {
+            | Equals | EOF | Class | Plus | Asterisk | RightBracket | Division | Dot | IsEqual
+            | NotEqual | Static | QuestionMark | ExclamationMark => {
                 error!("unexpected token while parsing expresion: {:?}", token);
                 Err(AstError::unexpeced_token(
                     "Number,name,string,bool,return,import,if,let,fn,-,[,(,",
@@ -523,6 +523,10 @@ pub enum Node {
         left: Box<Node>,
         right: Box<Node>,
     },
+    NotEqual {
+        left: Box<Node>,
+        right: Box<Node>,
+    },
     FloatLiteral(f64),
     Null,
     NewLine,
@@ -565,7 +569,7 @@ mod pratt_parser {
     use super::Node;
     use crate::{
         ast::{AstBuilder, AstError, MathSign},
-        token::Token::{self},
+        token::Token::{self, NotEqual},
     };
 
     fn infix_binding_power(op: &MathSign) -> (u8, u8) {
@@ -698,10 +702,18 @@ mod pratt_parser {
                 Some(Token::Minus) => MathSign::Minus,
                 Some(Token::Asterisk) => MathSign::Multiply,
                 Some(Token::Division) => MathSign::Division,
-                Some(Token::IsEq) => {
+                Some(Token::IsEqual) => {
                     lexer.next()?;
                     let next = lexer.next()?;
                     return Ok(Node::IsEqual {
+                        left: Box::new(lhs),
+                        right: Box::new(parse_expression(lexer, 0, next, end_token)?),
+                    });
+                }
+                Some(NotEqual) => {
+                    lexer.next()?;
+                    let next = lexer.next()?;
+                    return Ok(Node::NotEqual {
                         left: Box::new(lhs),
                         right: Box::new(parse_expression(lexer, 0, next, end_token)?),
                     });

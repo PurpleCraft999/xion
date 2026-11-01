@@ -71,7 +71,7 @@ pub fn lib(_attr: TokenStream, stream: TokenStream) -> TokenStream {
             functions::NativeFunction,
             class::{NativeClass, NativeClassInstance, Static},
             ast::VariableAttributes,
-            runtime::{FromValue, RuntimeError, Variable, ToVariable, VariableType},
+            runtime::{FromValue, RuntimeError, Variable, ToVariable, VariableType, RuntimeType},
             Value,
         };
     )));
@@ -607,8 +607,8 @@ pub fn native_class_instance(stream: TokenStream) -> TokenStream {
             if var_ty.to_string()=="VariableType :: Class"{
                 var_ty=quote! {VariableType::Class(crate::class::Class::Native(self.class()))}
             }
-            let attr = quote! { VariableAttributes{is_nullable:#nullable,..Default::default()} };
-            quote! {#name_str=>Some(Variable::with_attributes(Value::from(self.#i.to_owned()),#var_ty,#attr).expect("made from this type"))}
+            let attr = quote! { VariableAttributes{..Default::default()} };
+            quote! {#name_str=>Some(Variable::with_attributes(Value::from(self.#i.to_owned()),RuntimeType{ty:#var_ty,nullable:#nullable},#attr).expect("made from this type"))}
         })
         .collect::<Vec<_>>();
     let field_names_mut = class_instance
@@ -844,7 +844,7 @@ pub fn value_helper(attr: TokenStream, item: TokenStream) -> TokenStream {
                 var_ty = quote! {VariableType::Object(self.class())}
             }
 
-            let attr = quote! {VariableAttributes{is_nullable:#nullable,..Default::default()}};
+            let attr = quote! {VariableAttributes{..Default::default()}};
             expansions.push(quote! {
                 // 1. impl From<Type> for Value
                 impl From<#ty> for #enum_name {
@@ -890,7 +890,7 @@ pub fn value_helper(attr: TokenStream, item: TokenStream) -> TokenStream {
                 }
                 impl ToVariable for #ty{
                     fn to_variable(self)->Variable{
-                        Variable::with_attributes(#enum_name::#variant_ident(self.to_owned()),#var_ty,#attr).expect("made from this type")
+                        Variable::with_attributes(#enum_name::#variant_ident(self.to_owned()),RuntimeType{ty:#var_ty,nullable:#nullable},#attr).expect("made from this type")
                     }
 
 

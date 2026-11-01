@@ -77,22 +77,18 @@ impl AstBuilder {
             body,
         })
     }
-    ///call when : should be next
+    ///call when type is next
     /// returns type and if type is nullable
     fn parse_var_type(&mut self) -> (Option<String>, bool) {
-        if self.consume_if(|t| t == &Colon) {
-            let name = if matches!(self.peek(), Some(Name(_))) {
-                self.next_if_name().ok()
-            } else {
-                None
-            };
-
-            let nullable = self.consume_if(|t| t == &Token::QuestionMark);
-
-            (name, nullable)
+        let name = if matches!(self.peek(), Some(Name(_))) {
+            self.next_if_name().ok()
         } else {
-            (None, false)
-        }
+            None
+        };
+
+        let nullable = self.consume_if(|t| t == &Token::QuestionMark);
+
+        (name, nullable)
     }
     fn parse_var_declare(&mut self) -> Result<Node, AstError> {
         self.consume_if(|t| t == &Let);
@@ -104,8 +100,13 @@ impl AstBuilder {
 
         let name = self.next_if_name()?;
         //parse type
-        let (ty, nullable) = self.parse_var_type();
-        attrs.is_nullable = nullable;
+        let (ty, nullable) = if self.peek() == Some(&Colon) {
+            self.next()?;
+            self.parse_var_type()
+        } else {
+            (None, false)
+        };
+        // attrs.is_nullable = nullable;
         if !self.consume_if(|t| t == &Equals) {
             error!("not equals after var name");
             return Err(AstError::unexpeced_token(
@@ -120,7 +121,7 @@ impl AstBuilder {
         Ok(Node::VarDeclare {
             attributes: attrs,
             name,
-            r#type: ty,
+            var_type: AstType { ty, nullable },
             value: Box::new(value),
         })
     }
@@ -155,7 +156,7 @@ impl AstBuilder {
             }
             LeftBrace | RightBrace | RightParen | SemiColon | Comma | Colon | WhiteSpace
             | Equals | EOF | Class | Plus | Asterisk | RightBracket | Division | Dot | IsEqual
-            | NotEqual | Static | QuestionMark | ExclamationMark => {
+            | NotEqual | Static | QuestionMark | ExclamationMark | ThinArrow => {
                 error!("unexpected token while parsing expresion: {:?}", token);
                 Err(AstError::unexpeced_token(
                     "Number,name,string,bool,return,import,if,let,fn,-,[,(,",
@@ -281,17 +282,30 @@ impl AstBuilder {
                 continue;
             }
             if let Name(param_name) = token {
-                let (ty, nullable) = self.parse_var_type();
-                params.push((param_name, ty, nullable));
+                let (ty, nullable) = if self.peek() == Some(&Colon) {
+                    self.next()?;
+                    self.parse_var_type()
+                } else {
+                    (None, false)
+                };
+                params.push((param_name, AstType { ty, nullable }));
                 continue;
             }
             error!("unexpected token {:?} while parsing fn header", token);
             break;
         }
+        // let ret_ty = None;
+        let (ty, nullable) = if self.peek() == Some(&ThinArrow) {
+            self.next()?;
+            self.parse_var_type()
+        } else {
+            (None, false)
+        };
 
         Ok(Node::FnDeclare {
             name,
             parameters: params,
+            ret_type: AstType { ty, nullable },
             body: self.parse_scope()?,
         })
     }
@@ -438,6 +452,14 @@ impl AstError {
         }
     }
 }
+///A type in the ast stage
+///ty:None means has none and should be Any implictly
+///the type being Any also means its Any but explictly declared as such
+#[derive(Debug, PartialEq, Clone, Default)]
+pub struct AstType {
+    pub ty: Option<String>,
+    pub nullable: bool,
+}
 
 #[derive(Debug)]
 pub enum SyntaxError {
@@ -465,7 +487,7 @@ pub enum Node {
     VarDeclare {
         attributes: VariableAttributes,
         name: String,
-        r#type: Option<String>,
+        var_type: AstType,
         value: Box<Node>,
     },
     StringLiteral(String),
@@ -490,8 +512,9 @@ pub enum Node {
     FnDeclare {
         name: String,
         ///name type nullable
-        parameters: Vec<(String, Option<String>, bool)>,
+        parameters: Vec<(String, AstType)>,
         body: Vec<Node>,
+        ret_type: AstType,
     },
     Return(Option<Box<Node>>),
 
@@ -531,12 +554,13 @@ pub enum Node {
     Null,
     NewLine,
 }
+
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 #[non_exhaustive]
 ///DO NOT CHANGE VALUES
 pub struct VariableAttributes {
     pub(crate) is_static: bool,
-    pub(crate) is_nullable: bool,
+    // pub(crate) is_nullable: bool,
 }
 impl VariableAttributes {
     pub fn attr_static() -> Self {
@@ -549,9 +573,9 @@ impl VariableAttributes {
     pub fn is_static(&self) -> bool {
         self.is_static
     }
-    pub fn is_nullable(&self) -> bool {
-        self.is_nullable
-    }
+    // pub fn is_nullable(&self) -> bool {
+    //     self.is_nullable
+    // }
 }
 
 #[derive(Debug, Clone)]

@@ -13,12 +13,17 @@
 #    print("hi "+name+" from "+home_town);
 #}
 
-fn hello(name:String,age:int?,hobbie:String?){
-    print(name+age+hobbie);
+#fn hello(name:String,age:int?,hobbie:String?){
+#    print(name+age+hobbie);
+#}
+
+fn greet(name:String)->int{
+    return "Hello "+name;
 }
 
+print(greet("bob"));
 
-hello("mark",11,"code");
+#hello("mark",11,"code");
 
 #let x = 3;
 #x="hello";

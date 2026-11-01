@@ -60,14 +60,21 @@ impl Runtime {
             VarDeclare {
                 attributes,
                 name,
-                r#type: ty,
+                var_type,
                 value,
             } => {
-                let ty = self.parse_type(ty, &name)?;
+                let ty = self.parse_type(var_type.ty)?;
 
                 let value = self.eval(*value)?.ok_or(RuntimeError::RequireValue)?;
 
-                let var = Variable::with_attributes(value, ty, attributes)?;
+                let var = Variable::with_attributes(
+                    value,
+                    RuntimeType {
+                        ty,
+                        nullable: var_type.nullable,
+                    },
+                    attributes,
+                )?;
                 self.get_current_scope_mut().add_var(name.clone(), var)?;
 
                 Ok(None)
@@ -320,9 +327,27 @@ impl Runtime {
                 name,
                 parameters,
                 body,
+                ret_type,
             } => {
+                let return_type = match ret_type.ty.as_deref() {
+                    None => Some(RuntimeType {
+                        ty: VariableType::Any,
+                        nullable: false,
+                    }),
+                    Some("void") => None,
+                    Some(_) => Some(RuntimeType {
+                        ty: self.parse_type(ret_type.ty)?,
+                        nullable: ret_type.nullable,
+                    }),
+                };
+
                 self.get_current_scope_mut()
-                    .add_func(NonNativeFunction::new(name.clone(), parameters, body))?;
+                    .add_func(NonNativeFunction::new(
+                        name.clone(),
+                        parameters,
+                        body,
+                        return_type,
+                    ))?;
                 Ok(None)
             }
             Import(name) => self
@@ -336,7 +361,7 @@ impl Runtime {
     pub fn parse_type(
         &self,
         ty: Option<String>,
-        var_name: &str,
+        // var_name: &str,
     ) -> Result<VariableType, RuntimeError> {
         let ty = if let Some(ty) = ty {
             match &ty[..] {
@@ -347,12 +372,12 @@ impl Runtime {
                 "Any" => VariableType::Any,
                 "Class" => VariableType::Class(self.get_current_scope().get_class(&ty).ok_or(
                     RuntimeError::DoesNotExist(format!(
-                        "variable {var_name} cannot have type {ty} because class {ty}"
+                        "variable cannot have type {ty} because class {ty}"
                     )),
                 )?),
                 _ => VariableType::Object(self.get_current_scope().get_class(&ty).ok_or(
                     RuntimeError::DoesNotExist(format!(
-                        "variable {var_name} cannot have type {ty} because class {ty}"
+                        "variable cannot have type {ty} because class {ty}"
                     )),
                 )?),
             }
@@ -429,6 +454,17 @@ impl Runtime {
         })
     }
 }
+#[derive(Debug, Clone, PartialEq)]
+pub struct RuntimeType {
+    pub ty: VariableType,
+    pub nullable: bool,
+}
+impl RuntimeType {
+    pub fn can_accept(&self, value: &Value) -> bool {
+        self.ty.can_accept(value) || (self.nullable && value == &Value::Null)
+    }
+}
+
 #[xion_interpreter_proc_macros::value_helper(f64 => Value::Int(e) {Ok(e as f64)})]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
@@ -556,7 +592,7 @@ impl Value {
             ),
         }
     }
-    fn value_type(&self) -> ValueType {
+    pub fn value_type(&self) -> ValueType {
         match self {
             Self::Array(_) => ValueType::Array,
             Self::Bool(_) => ValueType::Bool,
@@ -576,7 +612,7 @@ impl Value {
             _ => None,
         }
     }
-    fn invoke_method(
+    pub fn invoke_method(
         &mut self,
         method_name: &str,
         args: Vec<Value>,
@@ -604,7 +640,7 @@ impl Value {
             }),
         }
     }
-    fn get_field(&self, field_name: &str) -> Result<Value, RuntimeError> {
+    pub fn get_field(&self, field_name: &str) -> Result<Value, RuntimeError> {
         match self {
             Value::Object(obj) => obj
                 .get_field(field_name)
@@ -628,7 +664,11 @@ impl Value {
             }),
         }
     }
-    fn reassign_field(&mut self, field_name: &str, new_value: Value) -> Result<(), RuntimeError> {
+    pub fn reassign_field(
+        &mut self,
+        field_name: &str,
+        new_value: Value,
+    ) -> Result<(), RuntimeError> {
         match self {
             Value::Object(obj) => obj.get_field_mut(field_name, |v| v.reassign_value(new_value)),
             e => {
@@ -957,7 +997,10 @@ impl Scope {
             class.name().to_string(),
             Variable::with_attributes(
                 Value::Class(class.clone()),
-                VariableType::Class(class.clone()),
+                RuntimeType {
+                    ty: VariableType::Class(class.clone()),
+                    nullable: false,
+                },
                 VariableAttributes::attr_static(),
             )?,
         )?;
@@ -986,7 +1029,10 @@ impl Scope {
                 class.name().to_string(),
                 Variable::with_attributes(
                     Value::Class(class.clone()),
-                    VariableType::Class(class),
+                    RuntimeType {
+                        ty: VariableType::Class(class),
+                        nullable: false,
+                    },
                     VariableAttributes::attr_static(),
                 )?,
             )?;
@@ -1107,36 +1153,30 @@ pub fn make_module(name: &str) -> Result<Scope, RuntimeError> {
 #[derive(Debug, Clone)]
 pub struct Variable {
     value: Value,
-    variable_type: VariableType,
+    variable_type: RuntimeType,
     attributes: VariableAttributes,
 }
 impl Variable {
-    pub fn new(value: Value, ty: VariableType) -> Result<Self, RuntimeError> {
+    pub fn new(value: Value, ty: RuntimeType) -> Result<Self, RuntimeError> {
         let attrs = VariableAttributes::default();
         Self::with_attributes(value, ty, attrs)
     }
     pub fn with_attributes(
         value: Value,
-        ty: VariableType,
+        ty: RuntimeType,
         attributes: VariableAttributes,
     ) -> Result<Self, RuntimeError> {
-        Self::value_is_valid(ty.clone(), &value, &attributes)?;
+        Self::value_is_valid(&ty, &value)?;
         Ok(Self {
             value,
             variable_type: ty,
             attributes,
         })
     }
-    fn value_is_valid(
-        variable_type: VariableType,
-        value: &Value,
-        attributes: &VariableAttributes,
-    ) -> Result<(), RuntimeError> {
-        if !(variable_type.can_accept(value) || (attributes.is_nullable() && value == &Value::Null))
-        {
-            Err(RuntimeError::VariableAssignTypeError {
-                expected_value: variable_type,
-                nullable: attributes.is_nullable(),
+    fn value_is_valid(variable_type: &RuntimeType, value: &Value) -> Result<(), RuntimeError> {
+        if !variable_type.can_accept(value) {
+            Err(RuntimeError::VariableTypeError {
+                expected_value: variable_type.to_owned(),
                 actual_value: value.value_type(),
             })
         } else {
@@ -1151,7 +1191,7 @@ impl Variable {
         self.value
     }
     pub fn reassign_value(&mut self, new_value: Value) -> Result<(), RuntimeError> {
-        Self::value_is_valid(self.variable_type.clone(), &new_value, &self.attributes)?;
+        Self::value_is_valid(&self.variable_type, &new_value)?;
         self.value = new_value;
         Ok(())
     }
@@ -1197,7 +1237,7 @@ impl Display for VariableType {
     }
 }
 impl VariableType {
-    fn can_accept(&self, other: &Value) -> bool {
+    pub fn can_accept(&self, other: &Value) -> bool {
         match (self, other) {
             (Self::String, Value::String(_)) => true,
             (Self::Array, Value::Array(_)) => true,
@@ -1244,9 +1284,8 @@ pub enum RuntimeError {
         actual_value: ValueType,
         expected_value: ValueType,
     },
-    VariableAssignTypeError {
-        expected_value: VariableType,
-        nullable: bool,
+    VariableTypeError {
+        expected_value: RuntimeType,
         actual_value: ValueType,
     },
     TypeErrorMultiplePosibleValues {
@@ -1308,14 +1347,18 @@ impl Display for RuntimeError {
                 f,
                 "when calling function {function_name} found {found} number of args but expected {expected} number of args"
             ),
-            RuntimeError::VariableAssignTypeError {
+            RuntimeError::VariableTypeError {
                 expected_value,
-                nullable,
                 actual_value,
             } => write!(
                 f,
-                "expected type{} {expected_value} but found type {actual_value}",
-                if *nullable { " nullable" } else { "" },
+                "expected type{} {} but found type {actual_value}",
+                if expected_value.nullable {
+                    " nullable"
+                } else {
+                    ""
+                },
+                expected_value.ty,
             ),
             RuntimeError::IoError(e) => write!(f, "interpreter ran into an io error {e:?}"),
         }

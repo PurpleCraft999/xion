@@ -349,7 +349,10 @@ impl<T: Into<Value> + Debug + Clone> Static<T> {
     pub fn to_variable(&self) -> Variable {
         Variable::with_attributes(
             self.0.clone().into(),
-            crate::runtime::VariableType::Any,
+            crate::runtime::RuntimeType {
+                ty: crate::runtime::VariableType::Any,
+                nullable: false,
+            },
             VariableAttributes::attr_static(),
         )
         .expect("has the any type")

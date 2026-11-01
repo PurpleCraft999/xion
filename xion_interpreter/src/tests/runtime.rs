@@ -1,4 +1,4 @@
-use crate::ast::VariableAttributes;
+use crate::ast::{AstType, VariableAttributes};
 
 use super::*;
 
@@ -43,13 +43,19 @@ fn test_variable_declaration_and_reference() {
     let nodes = vec![
         Node::VarDeclare {
             attributes: VariableAttributes::default(),
-            r#type: None,
+            var_type: AstType {
+                ty: None,
+                nullable: false,
+            },
             name: "x".to_string(),
             value: Box::new(Node::NumberLiteral(100)),
         },
         Node::VarDeclare {
             attributes: VariableAttributes::default(),
-            r#type: None,
+            var_type: AstType {
+                ty: None,
+                nullable: false,
+            },
             name: "y".to_string(),
             value: Box::new(Node::VarRef("x".to_string())),
         },
@@ -73,7 +79,10 @@ fn test_variable_reassignment() {
     let nodes = vec![
         Node::VarDeclare {
             attributes: VariableAttributes::default(),
-            r#type: None,
+            var_type: AstType {
+                ty: None,
+                nullable: false,
+            },
             name: "x".to_string(),
             value: Box::new(Node::NumberLiteral(10)),
         },
@@ -100,7 +109,10 @@ fn test_variable_reassignment() {
 fn test_math_operations() {
     let nodes = vec![Node::VarDeclare {
         attributes: VariableAttributes::default(),
-        r#type: None,
+        var_type: AstType {
+            ty: None,
+            nullable: false,
+        },
         name: "result".to_string(),
         value: Box::new(Node::Math {
             left: Box::new(Node::Math {
@@ -151,7 +163,10 @@ fn test_return_statement() {
 fn test_array_literal_evaluation() {
     let nodes = vec![Node::VarDeclare {
         attributes: VariableAttributes::default(),
-        r#type: None,
+        var_type: AstType {
+            ty: None,
+            nullable: false,
+        },
         name: "arr".to_string(),
         value: Box::new(Node::ArrayLiteral(vec![
             Node::NumberLiteral(1),
@@ -182,8 +197,15 @@ fn test_array_literal_evaluation() {
 fn test_function_declare() {
     let nodes = vec![Node::FnDeclare {
         name: "my_func".to_string(),
-        parameters: vec![("a".to_string(), None, false)],
+        parameters: vec![(
+            "a".to_string(),
+            AstType {
+                ty: None,
+                nullable: false,
+            },
+        )],
         body: vec![],
+        ret_type: AstType::default(),
     }];
 
     let runtime = run!(nodes; Runtime);
@@ -200,16 +222,23 @@ fn test_function_call() {
     let nodes = vec![
         Node::FnDeclare {
             name: "add_one".to_string(),
-            parameters: vec![("n".to_string(), None, false)],
+            parameters: vec![(
+                "n".to_string(),
+                AstType {
+                    ty: None,
+                    nullable: false,
+                },
+            )],
             body: vec![Node::Return(Some(Box::new(Node::Math {
                 left: Box::new(Node::VarRef("n".to_string())),
                 op: MathSign::Plus,
                 right: Box::new(Node::NumberLiteral(1)),
             })))],
+            ret_type: AstType::default(),
         },
         Node::VarDeclare {
             attributes: VariableAttributes::default(),
-            r#type: None,
+            var_type: AstType::default(),
             name: "res".to_string(),
             value: Box::new(Node::FnCall {
                 name: "add_one".to_string(),
@@ -237,7 +266,7 @@ fn test_class_declare() {
         name: "Point".to_string(),
         body: vec![Node::VarDeclare {
             attributes: VariableAttributes::default(),
-            r#type: None,
+            var_type: AstType::default(),
             name: "x".to_string(),
             value: Box::new(Node::NumberLiteral(5)),
         }],
@@ -257,7 +286,7 @@ fn test_constructor_var_assigned_to_field() {
     let nodes = vec![
         Node::VarDeclare {
             attributes: VariableAttributes::default(),
-            r#type: None,
+            var_type: AstType::default(),
             name: "initial_val".to_string(),
             value: Box::new(Node::NumberLiteral(77)),
         },
@@ -265,14 +294,14 @@ fn test_constructor_var_assigned_to_field() {
             name: "BoxObj".to_string(),
             body: vec![Node::VarDeclare {
                 attributes: VariableAttributes::default(),
-                r#type: None,
+                var_type: AstType::default(),
                 name: "val".to_string(),
                 value: Box::new(Node::NumberLiteral(0)),
             }],
         },
         Node::VarDeclare {
             attributes: VariableAttributes::default(),
-            r#type: None,
+            var_type: AstType::default(),
             name: "obj".to_string(),
             value: Box::new(Node::FnCall {
                 name: "BoxObj".to_string(),
@@ -307,7 +336,7 @@ fn test_constructor_var_assigned_to_field_shared_name() {
     let nodes = vec![
         Node::VarDeclare {
             attributes: VariableAttributes::default(),
-            r#type: None,
+            var_type: AstType::default(),
             name: "x".to_string(),
             value: Box::new(Node::NumberLiteral(100)),
         },
@@ -315,14 +344,14 @@ fn test_constructor_var_assigned_to_field_shared_name() {
             name: "Container".to_string(),
             body: vec![Node::VarDeclare {
                 attributes: VariableAttributes::default(),
-                r#type: None,
+                var_type: AstType::default(),
                 name: "x".to_string(),
                 value: Box::new(Node::NumberLiteral(0)),
             }],
         },
         Node::VarDeclare {
             attributes: VariableAttributes::default(),
-            r#type: None,
+            var_type: AstType::default(),
             name: "cnt".to_string(),
             value: Box::new(Node::FnCall {
                 name: "Container".to_string(),
@@ -359,14 +388,14 @@ fn test_field_access() {
             name: "Item".to_string(),
             body: vec![Node::VarDeclare {
                 attributes: VariableAttributes::default(),
-                r#type: None,
+                var_type: AstType::default(),
                 name: "price".to_string(),
                 value: Box::new(Node::NumberLiteral(250)),
             }],
         },
         Node::VarDeclare {
             attributes: VariableAttributes::default(),
-            r#type: None,
+            var_type: AstType::default(),
             name: "item".to_string(),
             value: Box::new(Node::FnCall {
                 name: "Item".to_string(),
@@ -375,7 +404,7 @@ fn test_field_access() {
         },
         Node::VarDeclare {
             attributes: VariableAttributes::default(),
-            r#type: None,
+            var_type: AstType::default(),
             name: "fetched_price".to_string(),
             value: Box::new(Node::FieldAccess {
                 var_name: "item".to_string(),
@@ -404,14 +433,14 @@ fn test_field_reassignment() {
             name: "Account".to_string(),
             body: vec![Node::VarDeclare {
                 attributes: VariableAttributes::default(),
-                r#type: None,
+                var_type: AstType::default(),
                 name: "balance".to_string(),
                 value: Box::new(Node::NumberLiteral(50)),
             }],
         },
         Node::VarDeclare {
             attributes: VariableAttributes::default(),
-            r#type: None,
+            var_type: AstType::default(),
             name: "acc".to_string(),
             value: Box::new(Node::FnCall {
                 name: "Account".to_string(),
@@ -453,23 +482,24 @@ fn test_method_call() {
             body: vec![
                 Node::VarDeclare {
                     attributes: VariableAttributes::default(),
-                    r#type: None,
+                    var_type: AstType::default(),
                     name: "total".to_string(),
                     value: Box::new(Node::NumberLiteral(10)),
                 },
                 Node::FnDeclare {
                     name: "deposit".to_string(),
-                    parameters: vec![("amount".to_string(), None, false)],
+                    parameters: vec![("amount".to_string(), AstType::default())],
                     body: vec![Node::VarReasign {
                         name: "total".to_string(),
                         new_value: Box::new(VarRef("amount".to_string())),
                     }],
+                    ret_type: AstType::default(),
                 },
             ],
         },
         Node::VarDeclare {
             attributes: VariableAttributes::default(),
-            r#type: None,
+            var_type: AstType::default(),
             name: "w".to_string(),
             value: Box::new(Node::FnCall {
                 name: "Wallet".to_string(),
@@ -533,17 +563,38 @@ let n =(""+5.0);"#;
         .map(|(k, v)| {
             (
                 k.to_string(),
-                Variable::new(Value::Float(v), VariableType::Float).unwrap(),
+                Variable::new(
+                    Value::Float(v),
+                    RuntimeType {
+                        ty: VariableType::Float,
+                        nullable: false,
+                    },
+                )
+                .unwrap(),
             )
         })
         .collect();
     expected.insert(
         String::from("m"),
-        Variable::new(Value::String("5".to_string()), VariableType::String).unwrap(),
+        Variable::new(
+            Value::String("5".to_string()),
+            RuntimeType {
+                ty: VariableType::String,
+                nullable: false,
+            },
+        )
+        .unwrap(),
     );
     expected.insert(
         String::from("n"),
-        Variable::new(Value::String("5".to_string()), VariableType::String).unwrap(),
+        Variable::new(
+            Value::String("5".to_string()),
+            RuntimeType {
+                ty: VariableType::String,
+                nullable: false,
+            },
+        )
+        .unwrap(),
     );
 
     assert!(
@@ -574,7 +625,7 @@ fn test_class_static_var_access() {
             name: "TestTest".to_string(),
             body: vec![Node::VarDeclare {
                 attributes: VariableAttributes::attr_static(),
-                r#type: None,
+                var_type: AstType::default(),
                 name: "test".to_string(),
                 value: Box::new(NumberLiteral(3)),
             }],
@@ -640,9 +691,11 @@ fn var_typed_reassign_incorect_type() {
     let run = run!(parse:r#"let n:String = "hi"; n=4; "#);
     assert!(matches!(
         run,
-        Err(RuntimeError::VariableAssignTypeError {
-            expected_value: VariableType::String,
-            nullable: false,
+        Err(RuntimeError::VariableTypeError {
+            expected_value: RuntimeType {
+                ty: VariableType::String,
+                nullable: false
+            },
             actual_value: ValueType::Int
         })
     ))
@@ -696,4 +749,70 @@ fn not_equal_does_equal() {
 fn not_equal_does_not_equal() {
     let run = run!(parse:"return 1 != 2;");
     assert_eq!(Ok(Some(Value::Bool(true))), run)
+}
+///ai
+#[test]
+fn typed_function_return_accepts_matching_value() {
+    assert_eq!(
+        Ok(Some(Value::Int(42))),
+        run!(parse:"fn answer() -> int { return 42; } return answer();")
+    );
+}
+///ai
+#[test]
+fn typed_function_return_rejects_mismatched_value() {
+    assert_eq!(
+        Err(RuntimeError::VariableTypeError {
+            actual_value: ValueType::String,
+            expected_value: RuntimeType {
+                ty: VariableType::Int,
+                nullable: false,
+            },
+        }),
+        run!(parse:r#"fn answer() -> int { return "42"; } return answer();"#)
+    );
+}
+///ai
+#[test]
+fn typed_function_return_requires_a_value() {
+    assert_eq!(
+        Err(RuntimeError::Other(
+            "expects a return value but found none".into()
+        )),
+        run!(parse:"fn answer() -> int {} answer();")
+    );
+}
+///ai
+#[test]
+fn nullable_function_return_accepts_null() {
+    assert_eq!(
+        Ok(Some(Value::Null)),
+        run!(parse:"fn maybe() -> int? { return null; } return maybe();")
+    );
+}
+///ai
+#[test]
+fn void_function_rejects_a_value() {
+    assert_eq!(
+        Err(RuntimeError::Other(
+            "expected no return value but one was found".into()
+        )),
+        run!(parse:"fn answer() -> void { return 42; } answer();")
+    );
+}
+///ai
+#[test]
+fn void_function_accepts_no_value() {
+    assert_eq!(
+        Ok(Some(Value::Int(42))),
+        run!(parse:"fn answer() -> void {} answer(); return 42;")
+    );
+}
+///ai
+#[test]
+fn untyped_function_can_return_a_value() {
+    assert_eq!(
+        Ok(Some(Value::Int(42))),
+        run!(parse:"fn answer() { return 42; } return answer();")
+    );
 }

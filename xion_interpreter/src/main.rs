@@ -1,7 +1,7 @@
 use std::{fs, path::PathBuf};
 
 use log::{debug, error};
-use xion_interpreter::runtime::Runtime;
+use xion_interpreter::{functions::FunctionReturn, runtime::Runtime};
 
 fn main() {
     log::set_max_level(log::LevelFilter::Info);
@@ -47,7 +47,10 @@ fn main() {
     debug!("{runtime:?}");
 
     match runtime.run() {
-        Ok(_) => (),
-        Err(e) => log::error!(target:"main", "{e}"),
+        Ok(FunctionReturn::Value(v)) => println!("program finished with an output of {v}"),
+        Ok(FunctionReturn::None) => println!("program finished with no output"),
+        Err(e) => {
+            log::error!(target:"main", "{e}");
+        }
     }
 }

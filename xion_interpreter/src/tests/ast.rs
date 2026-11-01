@@ -1,6 +1,6 @@
 use crate::{
     ast::{
-        AstBuilder,
+        AstBuilder, AstType,
         MathSign::Multiply,
         Node::{self, StringLiteral, *},
         VariableAttributes,
@@ -38,7 +38,10 @@ fn var_declaration() {
     assert_eq!(
         vec![VarDeclare {
             attributes: VariableAttributes::default(),
-            r#type: None,
+            var_type: AstType {
+                ty: None,
+                nullable: false
+            },
             name: "var_name".to_string(),
             value: Box::new(Node::NumberLiteral(50))
         }],
@@ -132,9 +135,25 @@ fn fn_declaration() {
         vec![Node::FnDeclare {
             name: "add".to_string(),
             parameters: vec![
-                ("a".to_string(), None, false),
-                ("b".to_string(), None, false)
+                (
+                    "a".to_string(),
+                    AstType {
+                        ty: None,
+                        nullable: false
+                    }
+                ),
+                (
+                    "b".to_string(),
+                    AstType {
+                        ty: None,
+                        nullable: false
+                    }
+                )
             ],
+            ret_type: AstType {
+                ty: None,
+                nullable: false
+            },
             body: vec![Node::Return(Some(Box::new(Node::NumberLiteral(42))))],
         }],
         ast
@@ -171,7 +190,10 @@ fn class_delcaration_with_variable() {
             name: "MyClass".to_string(),
             body: vec![VarDeclare {
                 attributes: VariableAttributes::default(),
-                r#type: None,
+                var_type: AstType {
+                    ty: None,
+                    nullable: false
+                },
                 name: "field".to_string(),
                 value: Box::new(StringLiteral("hello world".to_string()))
             }]
@@ -278,7 +300,10 @@ fn if_statment() {
             condition: Box::new(Node::BoolLiteral(true)),
             body: vec![Node::VarDeclare {
                 attributes: VariableAttributes::default(),
-                r#type: None,
+                var_type: AstType {
+                    ty: None,
+                    nullable: false
+                },
                 name: "x".to_string(),
                 value: Box::new(Node::BoolLiteral(false))
             }]
@@ -361,7 +386,10 @@ fn parse_static_var() {
                 is_static: true,
                 ..Default::default()
             },
-            r#type: None,
+            var_type: AstType {
+                ty: None,
+                nullable: false
+            },
             name: "var".to_string(),
             value: Box::new(Node::NumberLiteral(2))
         }],
@@ -446,7 +474,10 @@ fn typed_variables() {
         vec![Node::VarDeclare {
             attributes: VariableAttributes::default(),
             name: "x".to_string(),
-            r#type: Some("int".to_string()),
+            var_type: AstType {
+                ty: Some("int".to_string()),
+                nullable: false
+            },
             value: Box::new(Node::NumberLiteral(5))
         }],
         ast
@@ -459,11 +490,14 @@ fn typed_variables_nullable() {
     assert_eq!(
         vec![Node::VarDeclare {
             attributes: VariableAttributes {
-                is_nullable: true,
+                // is_nullable: true,
                 ..Default::default()
             },
             name: "x".to_string(),
-            r#type: Some("int".to_string()),
+            var_type: AstType {
+                ty: Some("int".to_string()),
+                nullable: true
+            },
             value: Box::new(Node::NumberLiteral(5))
         }],
         ast
@@ -476,11 +510,14 @@ fn typed_var_nullable_any() {
     assert_eq!(
         vec![Node::VarDeclare {
             attributes: VariableAttributes {
-                is_nullable: true,
+                // is_nullable: true,
                 ..Default::default()
             },
             name: "x".to_string(),
-            r#type: None,
+            var_type: AstType {
+                ty: None,
+                nullable: true
+            },
             value: Box::new(Node::BoolLiteral(true))
         }],
         ast

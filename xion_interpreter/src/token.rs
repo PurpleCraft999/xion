@@ -172,6 +172,7 @@ pub enum Token {
     ExclamationMark,
     Null,
     QuestionMark,
+    ThinArrow,
 }
 
 impl Token {
@@ -224,6 +225,7 @@ impl Token {
         let token = match (c1, c2) {
             ('=', '=') => IsEqual,
             ('!', '=') => NotEqual,
+            ('-', '>') => ThinArrow,
             _ => return None,
         };
         Some(token)
@@ -240,7 +242,7 @@ impl Token {
             LeftBrace | RightBrace | LeftBracket | RightBracket | SemiColon | Colon | Comma
             | Equals | LeftParen | RightParen | Plus | Minus | Asterisk | Division | Dot
             | NewLine | WhiteSpace | QuestionMark | ExclamationMark => 1,
-            Fn | If | IsEqual | NotEqual => 2,
+            Fn | If | IsEqual | NotEqual | ThinArrow => 2,
             Let => 3,
             BoolLiteral(true) | Null => 4,
             BoolLiteral(false) | Class => 5,

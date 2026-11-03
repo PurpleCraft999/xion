@@ -173,6 +173,8 @@ pub enum Token {
     Null,
     QuestionMark,
     ThinArrow,
+    ///@
+    At,
 }
 
 impl Token {
@@ -216,6 +218,7 @@ impl Token {
             '?' => QuestionMark,
             '!' => ExclamationMark,
             '\n' => NewLine,
+            '@' => At,
             whitespace if is_whitespace(whitespace) => WhiteSpace,
             _ => return None,
         };
@@ -241,7 +244,7 @@ impl Token {
             EOF => 0,
             LeftBrace | RightBrace | LeftBracket | RightBracket | SemiColon | Colon | Comma
             | Equals | LeftParen | RightParen | Plus | Minus | Asterisk | Division | Dot
-            | NewLine | WhiteSpace | QuestionMark | ExclamationMark => 1,
+            | NewLine | WhiteSpace | QuestionMark | ExclamationMark | At => 1,
             Fn | If | IsEqual | NotEqual | ThinArrow => 2,
             Let => 3,
             BoolLiteral(true) | Null => 4,

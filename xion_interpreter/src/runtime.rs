@@ -619,16 +619,16 @@ impl Value {
         scope: Scope,
     ) -> RuntimeReturn {
         match self {
-            Value::Object(obj) => obj.call_method(method_name, args, scope),
+            Value::Object(obj) => obj.invoke_method(method_name, args, scope),
             Value::String(str) => {
                 let args = {
                     let mut base = vec![Value::from(str.clone())];
                     base.extend(args);
                     base
                 };
-
+                use xion_std::string::*;
                 match method_name {
-                    "len" => xion_std::string::LenFn.call(args),
+                    "len" => LenFn.call(args),
                     _ => Err(RuntimeError::DoesNotExist(format!(
                         "method {method_name} does not exist for string"
                     ))),

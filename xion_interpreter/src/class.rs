@@ -68,7 +68,7 @@ pub fn instantiate_inner(
     fields: HashMap<String, Variable>,
 ) -> Runtime {
     //allows for Class(a:a);
-    const INJECTED_VAR_NAME: &str = "@from_constructor";
+    const INJECTED_VAR_NAME: &str = "$from_constructor";
 
     // let mut instance = class.instantiate();
 
@@ -271,7 +271,12 @@ pub enum ClassInstance {
     Native(Arc<Mutex<dyn NativeClassInstance>>),
 }
 impl ClassInstance {
-    pub fn call_method(&self, method_name: &str, args: Vec<Value>, scope: Scope) -> RuntimeReturn {
+    pub fn invoke_method(
+        &self,
+        method_name: &str,
+        args: Vec<Value>,
+        scope: Scope,
+    ) -> RuntimeReturn {
         match self {
             Self::Runtime(r) => r
                 .lock()

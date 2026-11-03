@@ -79,7 +79,7 @@ impl AstBuilder {
     }
     ///call when type is next
     /// returns type and if type is nullable
-    fn parse_var_type(&mut self) -> (Option<String>, bool) {
+    fn parse_type(&mut self) -> AstType {
         let name = if matches!(self.peek(), Some(Name(_))) {
             self.next_if_name().ok()
         } else {
@@ -88,23 +88,23 @@ impl AstBuilder {
 
         let nullable = self.consume_if(|t| t == &Token::QuestionMark);
 
-        (name, nullable)
+        AstType { ty: name, nullable }
     }
     fn parse_var_declare(&mut self) -> Result<Node, AstError> {
         self.consume_if(|t| t == &Let);
 
-        let mut attrs = VariableAttributes::default();
+        let mut attrs: VariableAttributes = VariableAttributes::default();
         if self.consume_if(|t| t == &Static) {
             attrs.is_static = true;
         }
 
         let name = self.next_if_name()?;
         //parse type
-        let (ty, nullable) = if self.peek() == Some(&Colon) {
+        let ty = if self.peek() == Some(&Colon) {
             self.next()?;
-            self.parse_var_type()
+            self.parse_type()
         } else {
-            (None, false)
+            AstType::default()
         };
         // attrs.is_nullable = nullable;
         if !self.consume_if(|t| t == &Equals) {
@@ -121,7 +121,7 @@ impl AstBuilder {
         Ok(Node::VarDeclare {
             attributes: attrs,
             name,
-            var_type: AstType { ty, nullable },
+            var_type: ty,
             value: Box::new(value),
         })
     }
@@ -154,9 +154,10 @@ impl AstBuilder {
                 self.line += 1;
                 return Ok(Node::NewLine);
             }
+
             LeftBrace | RightBrace | RightParen | SemiColon | Comma | Colon | WhiteSpace
             | Equals | EOF | Class | Plus | Asterisk | RightBracket | Division | Dot | IsEqual
-            | NotEqual | Static | QuestionMark | ExclamationMark | ThinArrow => {
+            | NotEqual | Static | QuestionMark | ExclamationMark | ThinArrow | At => {
                 error!("unexpected token while parsing expresion: {:?}", token);
                 Err(AstError::unexpeced_token(
                     "Number,name,string,bool,return,import,if,let,fn,-,[,(,",
@@ -282,30 +283,30 @@ impl AstBuilder {
                 continue;
             }
             if let Name(param_name) = token {
-                let (ty, nullable) = if self.peek() == Some(&Colon) {
+                let ty = if self.peek() == Some(&Colon) {
                     self.next()?;
-                    self.parse_var_type()
+                    self.parse_type()
                 } else {
-                    (None, false)
+                    AstType::default()
                 };
-                params.push((param_name, AstType { ty, nullable }));
+                params.push((param_name, ty));
                 continue;
             }
             error!("unexpected token {:?} while parsing fn header", token);
             break;
         }
         // let ret_ty = None;
-        let (ty, nullable) = if self.peek() == Some(&ThinArrow) {
+        let ret_type = if self.peek() == Some(&ThinArrow) {
             self.next()?;
-            self.parse_var_type()
+            self.parse_type()
         } else {
-            (None, false)
+            AstType::default()
         };
 
         Ok(Node::FnDeclare {
             name,
             parameters: params,
-            ret_type: AstType { ty, nullable },
+            ret_type,
             body: self.parse_scope()?,
         })
     }

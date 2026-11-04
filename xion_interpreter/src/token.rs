@@ -175,6 +175,7 @@ pub enum Token {
     ThinArrow,
     ///@
     At,
+    Group,
 }
 
 impl Token {
@@ -190,6 +191,7 @@ impl Token {
             "if" => If,
             "static" => Static,
             "null" => Null,
+            "group" => Group,
             number if let Ok(num) = number.parse::<i64>() => NumberLiteral(num),
             name if is_name(name) => Name(name.to_string()),
 
@@ -248,7 +250,7 @@ impl Token {
             Fn | If | IsEqual | NotEqual | ThinArrow => 2,
             Let => 3,
             BoolLiteral(true) | Null => 4,
-            BoolLiteral(false) | Class => 5,
+            BoolLiteral(false) | Class | Group => 5,
             Static | Return | Import => 6,
             //len checked already for all three of these
             //also who is writting names this long

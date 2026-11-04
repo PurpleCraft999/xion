@@ -1,6 +1,6 @@
 use crate::{
     ast::{
-        AstBuilder, AstType,
+        AstBuilder, AstType, FunctionHeader,
         MathSign::Multiply,
         Node::{self, StringLiteral, *},
         VariableAttributes,
@@ -133,26 +133,28 @@ fn fn_declaration() {
     ]);
     assert_eq!(
         vec![Node::FnDeclare {
-            name: "add".to_string(),
-            parameters: vec![
-                (
-                    "a".to_string(),
-                    AstType {
-                        ty: None,
-                        nullable: false
-                    }
-                ),
-                (
-                    "b".to_string(),
-                    AstType {
-                        ty: None,
-                        nullable: false
-                    }
-                )
-            ],
-            ret_type: AstType {
-                ty: None,
-                nullable: false
+            header: FunctionHeader {
+                name: "add".to_string(),
+                parameters: vec![
+                    (
+                        "a".to_string(),
+                        AstType {
+                            ty: None,
+                            nullable: false
+                        }
+                    ),
+                    (
+                        "b".to_string(),
+                        AstType {
+                            ty: None,
+                            nullable: false
+                        }
+                    )
+                ],
+                ret_type: AstType {
+                    ty: None,
+                    nullable: false
+                },
             },
             body: vec![Node::Return(Some(Box::new(Node::NumberLiteral(42))))],
         }],

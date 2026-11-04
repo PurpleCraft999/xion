@@ -196,16 +196,18 @@ fn test_array_literal_evaluation() {
 #[test]
 fn test_function_declare() {
     let nodes = vec![Node::FnDeclare {
-        name: "my_func".to_string(),
-        parameters: vec![(
-            "a".to_string(),
-            AstType {
-                ty: None,
-                nullable: false,
-            },
-        )],
+        header: crate::ast::FunctionHeader {
+            name: "my_func".to_string(),
+            parameters: vec![(
+                "a".to_string(),
+                AstType {
+                    ty: None,
+                    nullable: false,
+                },
+            )],
+            ret_type: AstType::default(),
+        },
         body: vec![],
-        ret_type: AstType::default(),
     }];
 
     let runtime = run!(nodes; Runtime);
@@ -221,20 +223,22 @@ fn test_function_declare() {
 fn test_function_call() {
     let nodes = vec![
         Node::FnDeclare {
-            name: "add_one".to_string(),
-            parameters: vec![(
-                "n".to_string(),
-                AstType {
-                    ty: None,
-                    nullable: false,
-                },
-            )],
+            header: crate::ast::FunctionHeader {
+                name: "add_one".to_string(),
+                parameters: vec![(
+                    "n".to_string(),
+                    AstType {
+                        ty: None,
+                        nullable: false,
+                    },
+                )],
+                ret_type: AstType::default(),
+            },
             body: vec![Node::Return(Some(Box::new(Node::Math {
                 left: Box::new(Node::VarRef("n".to_string())),
                 op: MathSign::Plus,
                 right: Box::new(Node::NumberLiteral(1)),
             })))],
-            ret_type: AstType::default(),
         },
         Node::VarDeclare {
             attributes: VariableAttributes::default(),
@@ -487,13 +491,15 @@ fn test_method_call() {
                     value: Box::new(Node::NumberLiteral(10)),
                 },
                 Node::FnDeclare {
-                    name: "deposit".to_string(),
-                    parameters: vec![("amount".to_string(), AstType::default())],
+                    header: crate::ast::FunctionHeader {
+                        name: "deposit".to_string(),
+                        parameters: vec![("amount".to_string(), AstType::default())],
+                        ret_type: AstType::default(),
+                    },
                     body: vec![Node::VarReasign {
                         name: "total".to_string(),
                         new_value: Box::new(VarRef("amount".to_string())),
                     }],
-                    ret_type: AstType::default(),
                 },
             ],
         },

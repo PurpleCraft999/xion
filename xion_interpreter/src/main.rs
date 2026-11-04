@@ -12,7 +12,7 @@ fn main() {
 
     #[cfg(debug_assertions)]
     {
-        main_file = "xion_interpreter/test_programs/new_var_test.xn".to_string();
+        main_file = "xion_interpreter/test_programs/group.xn".to_string();
     }
 
     #[cfg(not(debug_assertions))]

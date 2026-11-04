@@ -133,6 +133,14 @@ impl AstBuilder {
         .map(Box::new);
         Ok(Node::Return(return_value))
     }
+    fn parse_group(&mut self) -> Result<Node, AstError> {
+        self.consume_if(|t| t == &Group);
+
+        let name = self.next_if_name()?;
+        let body = self.parse_scope()?;
+
+        Ok(Node::CreateGroup { name, body })
+    }
 
     fn parse_expr<'expr, E>(&mut self, token: Token, end_token: &'expr E) -> Result<Node, AstError>
     where
@@ -154,10 +162,9 @@ impl AstBuilder {
                 self.line += 1;
                 return Ok(Node::NewLine);
             }
-
             LeftBrace | RightBrace | RightParen | SemiColon | Comma | Colon | WhiteSpace
             | Equals | EOF | Class | Plus | Asterisk | RightBracket | Division | Dot | IsEqual
-            | NotEqual | Static | QuestionMark | ExclamationMark | ThinArrow | At => {
+            | NotEqual | Static | QuestionMark | ExclamationMark | ThinArrow | At | Group => {
                 error!("unexpected token while parsing expresion: {:?}", token);
                 Err(AstError::unexpeced_token(
                     "Number,name,string,bool,return,import,if,let,fn,-,[,(,",
@@ -259,8 +266,7 @@ impl AstBuilder {
         let name = self.next_if_name()?;
         Ok(Node::Import(name))
     }
-
-    fn parse_function(&mut self) -> Result<Node, AstError> {
+    fn parse_function_header(&mut self) -> Result<FunctionHeader, AstError> {
         self.consume_if(|t| t == &Fn);
         let name = self.next_if_name()?;
         if !self.consume_if(|t| t == &LeftParen) {
@@ -302,13 +308,23 @@ impl AstBuilder {
         } else {
             AstType::default()
         };
-
-        Ok(Node::FnDeclare {
+        Ok(FunctionHeader {
             name,
             parameters: params,
             ret_type,
-            body: self.parse_scope()?,
         })
+    }
+
+    fn parse_function(&mut self) -> Result<Node, AstError> {
+        let header = self.parse_function_header()?;
+        if self.peek() == Some(&LeftBrace) {
+            Ok(Node::FnDeclare {
+                header,
+                body: self.parse_scope()?,
+            })
+        } else {
+            Ok(Node::FunctionHeader(header))
+        }
     }
     fn parse_scope(&mut self) -> Result<Vec<Node>, AstError> {
         self.parse_sequence_of_exprs(LeftBrace, RightBrace, SemiColon)
@@ -400,7 +416,7 @@ impl AstBuilder {
                 Let => self.parse_var_declare(),
 
                 Fn => self.parse_function(),
-
+                Group => self.parse_group(),
                 EOF => break,
                 If => self.parse_if_statement(),
 
@@ -511,11 +527,8 @@ pub enum Node {
     },
 
     FnDeclare {
-        name: String,
-        ///name type nullable
-        parameters: Vec<(String, AstType)>,
+        header: FunctionHeader,
         body: Vec<Node>,
-        ret_type: AstType,
     },
     Return(Option<Box<Node>>),
 
@@ -554,6 +567,11 @@ pub enum Node {
     FloatLiteral(f64),
     Null,
     NewLine,
+    FunctionHeader(FunctionHeader),
+    CreateGroup {
+        name: String,
+        body: Vec<Node>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -577,6 +595,13 @@ impl VariableAttributes {
     // pub fn is_nullable(&self) -> bool {
     //     self.is_nullable
     // }
+}
+#[derive(Debug, Clone, PartialEq)]
+pub struct FunctionHeader {
+    pub name: String,
+    ///name type
+    pub parameters: Vec<(String, AstType)>,
+    pub ret_type: AstType,
 }
 
 #[derive(Debug, Clone)]

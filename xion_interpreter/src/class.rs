@@ -2,7 +2,7 @@ use crate::ast::VariableAttributes;
 use crate::runtime::{ParentScope, Runtime};
 use crate::{
     Value,
-    functions::Function,
+    functions::{Function, FunctionHeader},
     runtime::{RuntimeError, RuntimeReturn, Scope, Variable},
 };
 use std::collections::{HashMap, HashSet};
@@ -250,6 +250,16 @@ impl Class {
             Self::Runtime(r) => r.static_fields.get(name).cloned(),
         }
     }
+
+    pub fn has_method(&self, header: &FunctionHeader) -> bool {
+        match self {
+            //TODO
+            Self::Native(_) => panic!("has_method not impl for native class"),
+
+            Self::Runtime(r) => r.methods.iter().any(|(_, f)| f.has_header(header)),
+        }
+    }
+
     pub fn instantiate(
         &self,
         args: Vec<crate::ast::Node>,

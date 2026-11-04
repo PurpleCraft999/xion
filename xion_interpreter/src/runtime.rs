@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt::{Debug, Display};
 use std::fs;
@@ -12,7 +12,9 @@ use crate::ast::{Node::*, VariableAttributes};
 use crate::class::{
     Class, ClassDefinitionError, ClassInstance, ClassPath, NativeClass, RuntimeClass,
 };
-use crate::functions::{Function, FunctionReturn, NativeFunction, NonNativeFunction};
+use crate::functions::{
+    Function, FunctionHeader, FunctionReturn, NativeFunction, NonNativeFunction,
+};
 use crate::runtime::MathError::{InvalidTypeLeft, InvalidTypeRight};
 use crate::runtime::RuntimeError::{DoesNotExist, Other};
 use crate::{lex_and_build_ast, xion_std};
@@ -63,7 +65,7 @@ impl Runtime {
                 var_type,
                 value,
             } => {
-                let ty = self.parse_type(var_type.ty)?;
+                let ty = self.parse_type(var_type.ty.as_deref())?;
 
                 let value = self.eval(*value)?.ok_or(RuntimeError::RequireValue)?;
 
@@ -289,7 +291,11 @@ impl Runtime {
                 eval_other_node(value, *other, self)
             }
             NewLine => Ok(None),
-            ClassDeclare { .. } | FnDeclare { .. } | Import(_) => Ok(None),
+            FunctionHeader(_) => Ok(None),
+            //these are early eval
+            ClassDeclare { .. } | FnDeclare { .. } | Import(_) | Node::CreateGroup { .. } => {
+                Ok(None)
+            }
         }
     }
     fn early_eval(&mut self, node: Node) -> RuntimeReturn {
@@ -323,31 +329,48 @@ impl Runtime {
                 // self.get_current_scope_mut().add_constructor(name)?;
                 Ok(None)
             }
-            FnDeclare {
-                name,
-                parameters,
-                body,
-                ret_type,
-            } => {
-                let return_type = match ret_type.ty.as_deref() {
-                    None => Some(RuntimeType {
-                        ty: VariableType::Any,
-                        nullable: false,
-                    }),
-                    Some("void") => None,
-                    Some(_) => Some(RuntimeType {
-                        ty: self.parse_type(ret_type.ty)?,
-                        nullable: ret_type.nullable,
-                    }),
-                };
-
+            FnDeclare { header, body } => {
+                // let parameters = params.into_iter().map_while(|(n,ty)|Some((n,self.parse_type(ty.ty.as_deref()).ok()?)))
+                let header = self.convert_from_ast_header_to_runtime_header(header)?;
                 self.get_current_scope_mut()
-                    .add_func(NonNativeFunction::new(
-                        name.clone(),
-                        parameters,
-                        body,
-                        return_type,
-                    ))?;
+                    .add_func(NonNativeFunction::new(header, body))?;
+                Ok(None)
+            }
+            Node::CreateGroup { name, body } => {
+                let mut function_names = HashSet::new();
+                let mut types: HashMap<String, VariableType> = HashMap::new();
+                for item in body {
+                    match item {
+                        FunctionHeader(func) => {
+                            let header = self.convert_from_ast_header_to_runtime_header(func)?;
+
+                            for (ty, v) in &types {
+                                if !v.has_method(&header) {
+                                    return Err(RuntimeError::DoesNotExist(format!(
+                                        "method {:?} on type {ty}",
+                                        header
+                                    )));
+                                }
+                            }
+
+                            function_names.insert(header.name);
+                        }
+                        VarRef(ty) => {
+                            let var_ty: VariableType = self.parse_type(Some(&ty))?;
+
+                            types.insert(ty, var_ty);
+                        }
+                        NewLine => (),
+                        n => panic!("temp group making panic:{n:?}"),
+                    }
+                }
+
+                self.get_current_scope_mut().add_group(Arc::new(Group {
+                    name,
+                    function_names,
+                    types,
+                }))?;
+
                 Ok(None)
             }
             Import(name) => self
@@ -358,24 +381,64 @@ impl Runtime {
             _ => Ok(None),
         }
     }
+    fn convert_from_ast_header_to_runtime_header(
+        &self,
+        header: crate::ast::FunctionHeader,
+    ) -> Result<FunctionHeader, RuntimeError> {
+        let crate::ast::FunctionHeader {
+            ret_type,
+            parameters,
+            name,
+        } = header;
+        let ret_type = match ret_type.ty.as_deref() {
+            None => Some(RuntimeType {
+                ty: VariableType::Any,
+                nullable: false,
+            }),
+            Some("void") => None,
+            Some(_) => Some(RuntimeType {
+                ty: self.parse_type(ret_type.ty.as_deref())?,
+                nullable: ret_type.nullable,
+            }),
+        };
+        let mut params = Vec::new();
+        for (name, ty) in parameters {
+            let ty = RuntimeType {
+                ty: self.parse_type(ty.ty.as_deref())?,
+                nullable: ty.nullable,
+            };
+            params.push((name, ty));
+        }
+        Ok(FunctionHeader {
+            name,
+            parameters: params,
+            ret_type,
+        })
+    }
+
     pub fn parse_type(
         &self,
-        ty: Option<String>,
+        ty: Option<&str>,
         // var_name: &str,
     ) -> Result<VariableType, RuntimeError> {
         let ty = if let Some(ty) = ty {
-            match &ty[..] {
+            match ty {
                 "int" => VariableType::Int,
                 "String" => VariableType::String,
                 "float" => VariableType::Float,
                 "bool" => VariableType::Bool,
                 "Any" => VariableType::Any,
-                "Class" => VariableType::Class(self.get_current_scope().get_class(&ty).ok_or(
+                "Class" => VariableType::Class(self.get_current_scope().get_class(ty).ok_or(
                     RuntimeError::DoesNotExist(format!(
-                        "variable cannot have type {ty} because class {ty}"
+                        "variable cannot be class {ty} because class {ty}"
                     )),
                 )?),
-                _ => VariableType::Object(self.get_current_scope().get_class(&ty).ok_or(
+                group if self.get_current_scope().has_group(group) => VariableType::Group(
+                    self.get_current_scope()
+                        .get_group(group)
+                        .expect("the group was just checked to exist"),
+                ),
+                _ => VariableType::Object(self.get_current_scope().get_class(ty).ok_or(
                     RuntimeError::DoesNotExist(format!(
                         "variable cannot have type {ty} because class {ty}"
                     )),
@@ -424,12 +487,7 @@ impl Runtime {
     }
     ///parses functions and classes
     fn parse_ahead(&mut self) -> RuntimeReturn {
-        for node in self
-            .nodes
-            .clone()
-            .into_iter()
-            .filter(|n| matches!(n, FnDeclare { .. } | ClassDeclare { .. } | Import(_)))
-        {
+        for node in self.nodes.clone() {
             self.early_eval(node)
                 .map_err(|e| RuntimeError::Other(format!("error during early eval: {e}")))?;
         }
@@ -475,9 +533,24 @@ pub enum Value {
     Object(ClassInstance),
     Float(f64),
     Class(Class),
+    Group(Arc<Group>, Box<Value>),
     Null,
 }
 impl Value {
+    fn type_string(&self) -> String {
+        match self {
+            Self::String(_) => "String".to_string(),
+            Self::Array(_) => "Array".to_string(),
+            Self::Bool(_) => "bool".to_string(),
+            Self::Float(_) => "float".to_string(),
+            Self::Int(_) => "int".to_string(),
+            Self::Null => "null".to_string(),
+            Self::Class(c) => c.name().to_string(),
+            Self::Object(o) => o.class().name().to_string(),
+            Self::Group(g, _) => g.name.to_string(),
+        }
+    }
+
     fn add(&self, other: &Value) -> Result<Value, MathError> {
         match self {
             Value::Bool(left) => match other {
@@ -602,6 +675,7 @@ impl Value {
             Self::Float(_) => ValueType::Float,
             Self::Class(_) => ValueType::Class,
             Self::Null => ValueType::Null,
+            Self::Group(..) => ValueType::Group,
         }
     }
     fn to_bool(&self) -> Option<bool> {
@@ -632,6 +706,16 @@ impl Value {
                     _ => Err(RuntimeError::DoesNotExist(format!(
                         "method {method_name} does not exist for string"
                     ))),
+                }
+            }
+            Value::Group(g, v) => {
+                if g.function_names.contains(method_name) {
+                    v.invoke_method(method_name, args, scope)
+                } else {
+                    Err(RuntimeError::DoesNotExist(format!(
+                        "method {method_name} in group {}",
+                        g.name
+                    )))
                 }
             }
             o => Err(RuntimeError::TypeError {
@@ -671,6 +755,7 @@ impl Value {
     ) -> Result<(), RuntimeError> {
         match self {
             Value::Object(obj) => obj.get_field_mut(field_name, |v| v.reassign_value(new_value)),
+            // Value::Group(g,v )
             e => {
                 error!(
                     "tried to reassigned field \"{field_name}\" on {}",
@@ -746,6 +831,7 @@ pub enum ValueType {
     Float,
     Class,
     Null,
+    Group,
 }
 impl Display for ValueType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -761,12 +847,13 @@ impl Display for ValueType {
                 Self::Object => "object",
                 Self::String => "string",
                 Self::Null => "null",
+                Self::Group => "group",
             }
         )
     }
 }
 
-fn vec_to_string<T: ToString>(vec: &Vec<T>) -> String {
+pub fn vec_to_string<T: ToString>(vec: &Vec<T>) -> String {
     if vec.is_empty() {
         return String::from("[]");
     }
@@ -803,6 +890,7 @@ impl std::fmt::Display for Value {
             Self::Float(f) => f.to_string(),
             Self::Class(c) => format!("{c:?}"),
             Self::Null => "null".to_string(),
+            Self::Group(g, _) => format!("Group {} item", g.name),
         };
         write!(f, "{string_value}")
     }
@@ -845,6 +933,12 @@ impl ParentScope {
             ParentScope::Normal(p) => p.get_class(name),
         }
     }
+    fn get_group(&self, name: &str) -> Option<Arc<Group>> {
+        match self {
+            ParentScope::Mut(m) => m.lock().ok()?.get_group(name),
+            ParentScope::Normal(p) => p.get_group(name),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -855,6 +949,7 @@ pub struct Scope {
     pub(crate) static_variables: HashMap<String, Variable>,
     pub(crate) functions: HashMap<String, Function>,
     pub(crate) classes: HashMap<String, Class>,
+    pub(crate) groups: HashMap<String, Arc<Group>>,
 }
 impl Scope {
     pub fn new(name: String) -> Self {
@@ -865,21 +960,20 @@ impl Scope {
             functions: HashMap::new(),
             classes: HashMap::new(),
             static_variables: HashMap::new(),
+            groups: HashMap::new(),
         }
     }
-    // pub fn add_native_fn(
-    //     &mut self,
-    //     name: &str,
-    //     func: impl NativeFunction + 'static,
-    // ) -> Result<(), RuntimeError> {
-    //     self.copy_native_function(name, Arc::new(func))
-    // }
+    pub fn is_global_name(&self, name: &str) -> bool {
+        self.classes.contains_key(name)
+            || self.functions.contains_key(name)
+            || self.groups.contains_key(name)
+    }
     pub fn add_native_function(
         &mut self,
         name: &str,
         func: Arc<dyn NativeFunction>,
     ) -> Result<(), RuntimeError> {
-        if self.functions.contains_key(name) {
+        if self.is_global_name(name) {
             Err(RuntimeError::AlreadyExists(format!(
                 "cannot add native function \"{name}\""
             )))
@@ -888,6 +982,29 @@ impl Scope {
                 .insert(name.to_owned(), Function::Native(func));
             Ok(())
         }
+    }
+    pub fn get_group(&self, name: &str) -> Option<Arc<Group>> {
+        match self.groups.get(name) {
+            Some(g) => Some(g.clone()),
+            None => self.parent_scope.as_ref().and_then(|p| p.get_group(name)),
+        }
+    }
+    pub fn add_group(&mut self, group: Arc<Group>) -> Result<(), RuntimeError> {
+        let name: &str = &group.name;
+        if self.is_global_name(name) {
+            return Err(RuntimeError::AlreadyExists(format!(
+                "cannot add group name taken \"{name}\""
+            )));
+        }
+        self.groups.insert(name.to_string(), group);
+        Ok(())
+    }
+    pub fn has_group(&self, name: &str) -> bool {
+        self.groups.contains_key(name)
+            || self
+                .parent_scope
+                .as_ref()
+                .is_some_and(|s| s.get_group(name).is_some())
     }
 
     pub fn with_parent(scope: Scope) -> Self {
@@ -921,7 +1038,7 @@ impl Scope {
     }
 
     pub fn add_func(&mut self, func: NonNativeFunction) -> Result<(), RuntimeError> {
-        if self.functions.contains_key(func.name()) {
+        if self.is_global_name(func.name()) {
             return Err(RuntimeError::AlreadyExists(format!(
                 "funtion {}",
                 func.name()
@@ -983,7 +1100,7 @@ impl Scope {
     }
     ///after init is static variables currently but can be anything that needs to be run after the class is added
     pub fn add_class(&mut self, class: Class) -> Result<(), RuntimeError> {
-        if self.classes.contains_key(class.name()) {
+        if self.is_global_name(class.name()) {
             return Err(RuntimeError::AlreadyExists(format!(
                 "class {}",
                 class.name()
@@ -1065,6 +1182,9 @@ impl Scope {
         }
         for (_, class) in other.classes {
             self.add_class(class)?;
+        }
+        for (_, group) in other.groups {
+            self.add_group(group)?;
         }
         Ok(())
     }
@@ -1166,21 +1286,21 @@ impl Variable {
         ty: RuntimeType,
         attributes: VariableAttributes,
     ) -> Result<Self, RuntimeError> {
-        Self::value_is_valid(&ty, &value)?;
+        let value = Self::value_is_valid(&ty, value)?;
         Ok(Self {
             value,
             variable_type: ty,
             attributes,
         })
     }
-    fn value_is_valid(variable_type: &RuntimeType, value: &Value) -> Result<(), RuntimeError> {
-        if !variable_type.can_accept(value) {
+    fn value_is_valid(variable_type: &RuntimeType, value: Value) -> Result<Value, RuntimeError> {
+        if !variable_type.can_accept(&value) {
             Err(RuntimeError::VariableTypeError {
                 expected_value: variable_type.to_owned(),
                 actual_value: value.value_type(),
             })
         } else {
-            Ok(())
+            Ok(variable_type.ty.convert_value(value))
         }
     }
 
@@ -1191,7 +1311,7 @@ impl Variable {
         self.value
     }
     pub fn reassign_value(&mut self, new_value: Value) -> Result<(), RuntimeError> {
-        Self::value_is_valid(&self.variable_type, &new_value)?;
+        let new_value = Self::value_is_valid(&self.variable_type, new_value)?;
         self.value = new_value;
         Ok(())
     }
@@ -1209,6 +1329,12 @@ impl PartialEq for Variable {
         self.value == other.value
     }
 }
+#[derive(Debug, Clone, PartialEq)]
+pub struct Group {
+    name: String,
+    function_names: HashSet<String>,
+    types: HashMap<String, VariableType>,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 #[allow(dead_code)]
@@ -1218,6 +1344,7 @@ pub enum VariableType {
     Float,
     Object(Class),
     Class(Class),
+    Group(Arc<Group>),
     Bool,
     Array,
     Any,
@@ -1233,6 +1360,7 @@ impl Display for VariableType {
             Self::Float => write!(f, "float"),
             Self::Int => write!(f, "int"),
             Self::String => write!(f, "String"),
+            Self::Group(g) => write!(f, "Item of Group {}", g.name),
         }
     }
 }
@@ -1246,8 +1374,24 @@ impl VariableType {
             (Self::Int, Value::Int(_)) => true,
             (Self::Object(s), Value::Object(c)) => *s == c.class(),
             (Self::Class(c), Value::Class(o)) => c == o,
+            (Self::Group(g), other) => g.types.contains_key(&other.type_string()),
             (Self::Any, Value::Null) => false,
             (Self::Any, _) => true,
+            _ => false,
+        }
+    }
+    pub fn convert_value(&self, value: Value) -> Value {
+        match (self, value) {
+            (Self::Float, Value::Int(i)) => Value::Float(i as f64),
+            (Self::Group(g), value) if g.types.contains_key(&value.type_string()) => {
+                Value::Group(g.clone(), Box::new(value))
+            }
+            (_, v) => v,
+        }
+    }
+    pub fn has_method(&self, header: &FunctionHeader) -> bool {
+        match self {
+            Self::Object(o) => o.has_method(header),
             _ => false,
         }
     }

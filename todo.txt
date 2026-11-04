@@ -17,3 +17,5 @@ typed function headers
 Make toml for imports instead
 int->float var assign
 figure out how to resolve import name conficts
+TESTS for groups
+remove panics for new things

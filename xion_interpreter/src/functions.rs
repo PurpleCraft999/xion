@@ -1,6 +1,6 @@
 use crate::{
     Value,
-    ast::{AstType, Node, VariableAttributes},
+    ast::{Node, VariableAttributes},
     runtime::{Runtime, RuntimeError, RuntimeType, Scope, Variable},
 };
 
@@ -16,53 +16,59 @@ impl Function {
             Self::Native(f) => f.call(args),
         }
     }
+    pub fn has_header(&self, header: &FunctionHeader) -> bool {
+        //toDo
+        match self {
+            Self::NonNative(f) => &f.header == header,
+            Self::Native(_) => panic!("native functions dont have has_header method yet"),
+        }
+    }
 }
 
 pub trait NativeFunction: std::fmt::Debug + Send + Sync {
     fn call(&self, args: Vec<Value>) -> Result<Option<Value>, RuntimeError>;
 }
+#[derive(Debug, Clone, PartialEq)]
+pub struct FunctionHeader {
+    pub name: String,
+    pub parameters: Vec<(String, RuntimeType)>,
+    pub ret_type: Option<RuntimeType>,
+}
+// impl Display for FunctionHeader{
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         write!(f,"fn {}({})",self.name,crate::runtime::vec_to_string(&self.parameters))
+//     }
+// }
 
 #[derive(Debug, Clone)]
 pub struct NonNativeFunction {
-    name: String,
-    params: Vec<(String, AstType)>,
+    header: FunctionHeader,
     body: Vec<Node>,
-    ret_type: Option<RuntimeType>,
 }
 impl NonNativeFunction {
-    pub fn new(
-        name: String,
-        params: Vec<(String, AstType)>,
-        body: Vec<Node>,
-        ret_type: Option<RuntimeType>,
-    ) -> Self {
-        Self {
-            name,
-            params,
-            body,
-            ret_type,
-        }
+    pub fn new(header: FunctionHeader, body: Vec<Node>) -> Self {
+        Self { header, body }
     }
     pub fn name(&self) -> &str {
-        &self.name
+        &self.header.name
     }
 
     fn call(&self, args: Vec<Value>, scope: Scope) -> crate::runtime::RuntimeReturn {
-        if args.len() > self.params.len() {
+        if args.len() > self.header.parameters.len() {
             return Err(RuntimeError::FnCallArgLengthMixMatch {
                 function_name: self.name().to_string(),
-                expected: self.params.len(),
+                expected: self.header.parameters.len(),
                 found: args.len(),
             });
         }
 
         let mut runtime = Runtime::with_scope_and_nodes(self.body.clone(), scope);
-        for (i, (name, ty)) in self.params.iter().enumerate() {
+        for (i, (name, ty)) in self.header.parameters.iter().enumerate() {
             let name = name.to_owned();
             let nullable = ty.nullable;
             let ty = ty.ty.to_owned();
 
-            let ty = runtime.parse_type(ty)?;
+            // let ty = runtime.parse_type(ty)?;
             let attr = VariableAttributes {
                 // is_nullable: nullable,
                 ..Default::default()
@@ -74,7 +80,7 @@ impl NonNativeFunction {
                 if !nullable {
                     return Err(RuntimeError::FnCallArgLengthMixMatch {
                         function_name: self.name().to_string(),
-                        expected: self.params.len(),
+                        expected: self.header.parameters.len(),
                         found: args.len(),
                     });
                 }
@@ -89,9 +95,10 @@ impl NonNativeFunction {
                 )
                 .expect("this is safe because these are the first vars made");
         }
-        let log_target = &("function call: ".to_string() + &self.name);
+        let log_target = &("function call: ".to_string() + &self.header.name);
         let ret_value = runtime.run().map(|v| v.as_value())?;
-        match (&self.ret_type, &ret_value) {
+
+        match (&self.header.ret_type, &ret_value) {
             (None, None) => Ok(None),
             (None, Some(_)) => {
                 log::error!(target:log_target,"expected no return value but found one");

@@ -1,0 +1,17 @@
+class Foo{fn foo_bar()->int{return 3;}fn hi()->String{return "true";}}
+class Bar{fn foo_bar()->int{return 1;}fn hi()->String{return "hi";}}
+
+group FooBar{
+    Foo;
+    Bar;
+
+    fn foo_bar() -> int;
+    fn hi()->String;
+}
+
+fn print_foobar(i:FooBar)->void{
+    print(i.hi());
+    print(i.foo_bar());
+}
+
+print_foobar(Foo());
